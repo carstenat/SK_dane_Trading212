@@ -5,7 +5,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 Daňový Asistent & Optimalizátor", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 🎨 FUNKČNÝ PREPÍNAČ PRE DARK MODE (ČISTÉ CSS)
+# 🎨 PREPÍNAČ PRE DARK MODE (ČISTÉ CSS)
 # =========================================================================
 st.sidebar.header("⚙️ Nastavenia vzhľadu")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=True)
@@ -13,32 +13,13 @@ dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=True
 if dark_mode:
     st.markdown("""
         <style>
-        .stApp {
-            background-color: #121214 !important;
-            color: #E1E1E6 !important;
-        }
-        h1, h2, h3, h4, h5, h6, label, p, span {
-            color: #F4F4F5 !important;
-        }
-        .stTabs [data-baseweb="tab-list"] {
-            background-color: #1A1A1E !important;
-            border-radius: 8px;
-            padding: 5px;
-        }
-        .stTabs [data-baseweb="tab"] {
-            color: #A1A1AA !important;
-        }
-        .stTabs [aria-selected="true"] {
-            color: #38BDF8 !important;
-            font-weight: bold;
-        }
-        div[data-testid="stMetricValue"] {
-            color: #38BDF8 !important;
-        }
-        .stDataFrame div {
-            background-color: #1A1A1E !important;
-            color: #E1E1E6 !important;
-        }
+        .stApp { background-color: #121214 !important; color: #E1E1E6 !important; }
+        h1, h2, h3, h4, h5, h6, label, p, span { color: #F4F4F5 !important; }
+        .stTabs [data-baseweb="tab-list"] { background-color: #1A1A1E !important; border-radius: 8px; padding: 5px; }
+        .stTabs [data-baseweb="tab"] { color: #A1A1AA !important; }
+        .stTabs [aria-selected="true"] { color: #38BDF8 !important; font-weight: bold; }
+        div[data-testid="stMetricValue"] { color: #38BDF8 !important; }
+        .stDataFrame div { background-color: #1A1A1E !important; color: #E1E1E6 !important; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -56,8 +37,10 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
+    # Vyčistíme názvy tickerov do jednotného formátu
     df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", "").str.replace(".", "").str.replace(" ", "").str.upper()
     
+    # Vybudujeme databázu celých názvov spoločností
     databaza_mien = {}
     for _, riadok in df.iterrows():
         tick_c = str(riadok['Ticker_Clean'])
@@ -67,7 +50,7 @@ if uploaded_files:
                 databaza_mien[tick_c] = full_name
 
     # =========================================================================
-    # 🔥 1. ČASŤ: DAŇOVÝ OPTIMALIZÁTOR (UMIESTNENÝ HORE)
+    # 🔥 1. ČASŤ: DAŇOVÝ OPTIMALIZÁTOR (NAVRCHU STRÁNKY)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -89,8 +72,10 @@ if uploaded_files:
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
-        skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker_pure}, ktorý momentálne vidíte v platforme:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_optimalizator_v12")
+        # POLÍČKO PRE KUSY S JEDINEČNÝM KĽÚČOM
+        skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker_pure}, ktorý momentálne vidíte v platforme:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_optimalizator_v15")
         
+        # Rekonštrukcia skladu pomocou FIFO
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].copy()
         df_ticker = df_ticker.sort_values(by='Time').reset_index(drop=True)
         
@@ -133,7 +118,7 @@ if uploaded_files:
             for n in sklad_aktualny:
                 if potrebne_ks <= 1e-6:
                     break
-                vziat_ks = min(n['shares'], potrebne_ks)
+                vziat_ks = min(n['shares'], potrebné_kopirovanie :=  potrebne_ks)
                 potrebne_ks -= vziat_ks
                 
                 nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
@@ -166,12 +151,12 @@ if uploaded_files:
                 "Zostáva čakať": list_cakania
             })
             st.dataframe(tovarna_tabulky, use_container_width=True, hide_index=True)
-            st.info("💡 **Ako čítať tabuľku:** Platforma Trading 212 predáva akcie chronologicky od najstarších (pravidlo FIFO). Sledujte zelené riadky – tie predáte bezpečne bez odovzdania eura štátu.")
+            st.info("💡 **Ako čítať tabuľku:** Platforma Trading 212 predáva akcie chronologicky od najstarších (pravidlo FIFO). Sledujte zelené riadky – tie predáte bezpečne.")
         else:
             st.info("Pre zobrazenie daňového breakdownu zadajte do políčka vyššie množstvo väčšie ako 0.")
 
     # =========================================================================
-    # 📑 2. ČASŤ: BEZPEČNÁ HISTORICKÁ MATEMATIKA PRE ROČNÉ PREHĽADY
+    # 📑 2. ČASŤ: HISTORICKÉ ROČNÉ PREHĽADY PRE DAŇOVÉ PRIZNANIE (ÚPLNE PLOCHÁ STRUKTÚRA)
     # =========================================================================
     st.markdown("##")
     st.markdown("---")
@@ -200,15 +185,15 @@ if uploaded_files:
         if 'interest on cash' in typ:
             vysledky_po_rokoch[rok]['uroky'] += total
             continue
+            
         if 'dividend' in typ:
             vysledky_po_rokoch[rok]['div_brutto'] += (total + tax)
             vysledky_po_rokoch[rok]['div_dan'] += tax
             continue
             
-        # 🔓 LOGICKÁ OPRAVA: Odsadenie a spracovanie splitov na riadku 213 je 100% spravené čistou formou
-        if 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ:
-            if abs(result) < 2.0 and total < 10.0:
-                continue
-            
         if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
             if tick_c not in sklad_historicky: 
+                sklad_historicky[tick_c] = []
+            if shares > 0:
+                sklad_historicky[tick_c].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
+            
