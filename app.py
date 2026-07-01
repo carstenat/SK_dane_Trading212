@@ -23,7 +23,7 @@ if uploaded_files:
     vysledky_po_rokoch = {}
     databaza_mien = {}
     
-    # 1. KROK: ČISTÁ FIFO MATEMATIKA A ROČNÉ PREHĽADY
+    # 1. KROK: ABSOLÚTNA A NEDOTKNUTÁ HISTORICKÁ FIFO MATEMATIKA PRE ROČNÉ PREHĽADY
     for _, riadok in df.iterrows():
         typ = str(riadok['Action']).lower()
         ticker_surovy = str(riadok['Ticker'])
@@ -56,7 +56,7 @@ if uploaded_files:
         if ('sell' in typ or 'divestment' in typ or 'withdrawal' in typ) and abs(result) < 2.0 and total < 10.0:
             continue
             
-        # ZAPOČÍTAVAME VÝHRADNE REÁLNE INVESTIČNÉ AKCIE (BEZ DIVIDENDOVÉHO ŠUMU)
+        # ZAPOČÍTAVAME ÚPLNE VŠETKO (VRÁTANE MIKROCENTOVÝCH FRAGMENTOV)
         if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
             if ticker not in sklad: sklad[ticker] = []
             sklad[ticker].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares if shares > 0 else 0.0})
@@ -69,7 +69,7 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker][0] # OPRAVENÉ: Presný index na prvý nákup zo zoznamu
+                    najstarsie = sklad[ticker][0]
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
@@ -134,7 +134,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: DNEŠNÝ OPTIMALIZÁTOR - OCHRANNÁ HRANICA PRACHU STANOVENÁ NA 0.05 KS
+    # 2. KROK: DNEŠNÝ OPTIMALIZÁTOR - SKRÝVA LEN VIZUÁLNE ROZDIELNE FRAGMENTY (< 0.01 ks)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -145,10 +145,13 @@ if uploaded_files:
     aktivne_tickery = []
     for t in sklad.keys():
         celkovo_ks = sum(n['shares'] for n in sklad[t])
-        if skryt_stare and celkovo_ks >= 0.05:
-            aktivne_tickery.append(t)
-        elif not skryt_stare and celkovo_ks > 0.0001:
-            aktivne_tickery.append(t)
+        if skryt_stare:
+            # VIZUÁLNY FILTER PRE OPTIMALIZÁTOR: Skryjeme len tie firmy, kde zostal zostatok menší ako 0.01 ks (zaokrúhľovací prach)
+            if celkovo_ks >= 0.01:
+                aktivne_tickery.append(t)
+        else:
+            if celkovo_ks > 0.0001:
+                aktivne_tickery.append(t)
                 
     aktivne_tickery = sorted(aktivne_tickery)
     
