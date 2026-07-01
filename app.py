@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-st.set_page_config(page_title="Trading 212 PRO Daňový Asistent & Optimalizátor", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Trading 212 PRO Daňový Optimalizátor", page_icon="📈", layout="wide")
 
 # =========================================================================
 # 🎨 FUNKČNÝ PREPÍNAČ PRE DARK MODE (DEFAULT SVETLÝ, PRÉMIOVÝ FINTECH)
@@ -21,8 +21,6 @@ if dark_mode:
         div[data-testid="stMetric"] { background-color: #1E293B !important; border: 2px solid #475569 !important; border-radius: 12px !important; padding: 14px 18px !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
         div[data-testid="stMetricValue"] { color: #38BDF8 !important; font-size: 22px !important; font-weight: 800 !important; }
         div[data-testid="stMetricLabel"] { color: #CBD5E1 !important; font-size: 13px !important; font-weight: 600 !important; }
-        .stTabs [data-baseweb="tab-list"] { background-color: #1E293B !important; border: 1px solid #475569 !important; border-radius: 10px; padding: 4px; }
-        .stTabs [aria-selected="true"] { background-color: #0EA5E9 !important; color: #FFFFFF !important; font-weight: 700 !important; }
         .stDataFrame div { background-color: #111827 !important; color: #F8FAFC !important; border-radius: 8px; }
         </style>
     """, unsafe_allow_html=True)
@@ -35,13 +33,11 @@ else:
         div[data-testid="stMetric"] { background-color: #F8FAFC !important; border: 2px solid #CBD5E1 !important; border-radius: 12px !important; padding: 14px 18px !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important; }
         div[data-testid="stMetricValue"] { color: #0284C7 !important; font-size: 22px !important; font-weight: 800 !important; }
         div[data-testid="stMetricLabel"] { color: #475569 !important; font-size: 13px !important; font-weight: 600 !important; }
-        .stTabs [data-baseweb="tab-list"] { background-color: #F1F5F9 !important; border: 1px solid #CBD5E1 !important; border-radius: 10px; padding: 4px; }
-        .stTabs [aria-selected="true"] { background-color: #0284C7 !important; color: #FFFFFF !important; font-weight: 700 !important; }
         </style>
     """, unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny nástroj na kontrolu časového testu pred predajom a automatickú ročnú daňovú uzávierku.")
+st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
 
@@ -54,10 +50,9 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
+    # Pretypovanie a ošetrenie nulových hodnôt
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
-    df['Result'] = pd.to_numeric(df['Result'], errors='coerce').fillna(0.0)
-    df['Withholding tax'] = pd.to_numeric(df['Withholding tax'], errors='coerce').fillna(0.0)
     
     df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
     
@@ -70,7 +65,7 @@ if uploaded_files:
                 databaza_mien[tick_c] = full_name
 
     # =========================================================================
-    # 🔥 1. ČASŤ: DAŇOVÝ OPTIMALIZÁTOR SKLADU (100% LINEÁRNE FIFO)
+    # 🔥 DAŇOVÝ OPTIMALIZÁTOR SKLADU (IZOLOVANÝ A PLOCHÝ)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -88,14 +83,14 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v135")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v140")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnené = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v135")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v140")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v135")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v140")
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
@@ -107,6 +102,7 @@ if uploaded_files:
             datum = riadok['Time']
             
             if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
+                # 🛡️ ABSOLÚTNA POISTKA: Ak sú nákupné kusy nula (split), riadok bezpečne preskočíme a kód nepadne
                 if shares > 0.00001:
                     sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
             elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
@@ -118,15 +114,13 @@ if uploaded_files:
                         predat_este -= vziat
                 sklad_aktualny = [x for x in sklad_aktualny if x['shares'] > 1e-6]
         
-        # Spočítame reálny maximálny stav skladu, ktorý zostal k dispozícii
         max_sklad_dostupny = sum([x['shares'] for x in sklad_aktualny])
         
-        if vstup_vlastnené > 0:
-            # 🛡️ POISTKA: Kód automaticky oreže výpočet na maximálne dostupné množstvo, aby nespadla tabuľka
-            skutocny_stav = min(vstup_vlastnené, max_sklad_dostupny)
+        if vstup_vlastnene > 0:
+            skutocny_stav = min(vstup_vlastnene, max_sklad_dostupny)
             
             if skutocny_stav <= 0:
-                st.warning(f"Upozornenie: Pre {vybrany_ticker_pure} nemáte podľa nahranej histórie otvorenú žiadnu pozíciu (všetko bolo predtým predané).")
+                st.warning(f"Upozornenie: Pre {vybrany_ticker_pure} nemáte podľa nahranej histórie otvorenú žiadnu pozíciu.")
             else:
                 potrebne_ks = skutocny_stav
                 dnes = datetime.now()
@@ -146,7 +140,7 @@ if uploaded_files:
                 for n in sklad_aktualny:
                     if potrebne_ks < 1e-5:
                         break
-                    vziat_ks = min(n['shares'], potrebné_ks_pure := potrebne_ks)
+                    vziat_ks = min(n['shares'], potrebne_ks)
                     potrebne_ks -= vziat_ks
                     
                     nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
@@ -168,3 +162,17 @@ if uploaded_files:
                         ks_mlade += vziat_ks
                         vydavok_mladeho_balika += cena_balika
                         list_stavov.append("🔴 Zdaňuje sa (Mladá akcia)")
+                        list_dat_oslobodenia.append((nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y'))
+                        list_cakania.append(f"⏳ {365 - vek_dni} dní")
+                
+                st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
+                st.progress(float(ks_bez_dane / skutocny_stav))
+                
+                c1, c2 = st.columns(2)
+                
+                if aktualna_cena > 0:
+                    trhova_hodnota_safe = ks_bez_dane * aktualna_cena
+                    cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
+                    c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**\nHodnota: {trhova_hodnota_safe:.2f} € (Čistý zisk: +{cisty_zisk_safe:.2f} €)")
+                    
+                    prijem_mlade = ks_mlade * aktualna_cena
