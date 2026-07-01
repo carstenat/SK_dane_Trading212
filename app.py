@@ -18,6 +18,8 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
+    df['Ticker'] = df['Ticker'].astype(str).fillna('').str.strip()
+    
     sklad_historicky = {}
     databaza_mien = {}
     vysledky_po_rokoch = {}
@@ -28,6 +30,9 @@ if uploaded_files:
         ticker_surovy = str(riadok['Ticker'])
         full_name = str(riadok.get('Name', 'Neznáma spoločnosť')).strip()
         
+        if not ticker_surovy or ticker_surovy == 'nan':
+            continue
+            
         ticker = ticker_surovy.replace("US ", "").replace("_US", "").replace("_US_EQ", "").replace("_EQ", "").replace(".US", "").strip()
         ticker = ticker.replace("_", ".").replace(" ", ".").upper()
         
@@ -141,10 +146,11 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - 100% NEPRIESTRELNÉ PÁROVANIE TICKEROV
+    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - ČISTÁ ARCHITEKTÚRA BEZ RIZIKA ZLYHANIA
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
+    st.write("Vyberte firmu zo zoznamu a zadajte aktuálny otvorený stav, ktorý vidíte v platforme Trading 212.")
     
     zoznam_vsetkych_tickerov = []
     for _, riadok in df.iterrows():
@@ -154,29 +160,25 @@ if uploaded_files:
             if tick_c and tick_c != 'nan' and tick_c not in zoznam_vsetkych_tickerov:
                 zoznam_vsetkych_tickerov.append(tick_c)
                 
-    zoznam_vsetkych_tickerov = sorted(zoznam_vsetkych_tickerov)
+    zoznam_vsetkych_tickerov = sorted(list(set(zoznam_vsetkych_tickerov)))
     
     if not zoznam_vsetkych_tickerov:
         st.info("V nahratých súboroch sa nenachádzajú žiadne nákupné transakcie.")
     else:
-        # Vytvoríme pekné texty pre menu, ale zachováme čisté párovanie
+        # 🔓 BEZPEČNÉ BUDOVANIE PONUKY: Žiadne riskantné vnorené prepisovanie textov
         ponuka_pre_menu = []
-        mapovanie = {}
+        mapovanie_tickerov = {}
         for t in zoznam_vsetkych_tickerov:
-            # Priradíme správny pekný názov podľa zjednoteného kľúča
-            text_polozky = f"{t} - {databaza_mien.get(t, 'Spoločnosť')}"
-            for kľúč in databaza_mien.keys():
-                if kľúč.replace(".", "").replace("_", "") == t:
-                    text_polozky = f"{kľúč} - {databaza_mien[kľúč]}"
-            ponuka_pre_menu.append(text_polozky)
-            mapovanie[text_polozky] = t
+            pekné_meno = databaza_mien.get(t, "Spoločnosť z platformy")
+            text_riadku = f"{t} - {pekné_meno}"
+            ponuka_pre_menu.append(text_riadku)
+            mapovanie_tickerov[text_riadku] = t
             
-        ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
+        ponuka_pre_menu = sorted(ponuka_pre_menu)
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         
-        # Vytiahneme zjednotený ticker bez bodiek a medzier
-        vybrany_ticker_pure = mapovanie[vybrany_text]
+        # 🔓 LOGICKÁ OPRAVA: Ticker vytiahneme priamo zo slovníka, úplne sme vyhodili nebezpečný .split().strip()
+        vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
-        skutocny_stav_mobil = st.number_input("Zadajte presný počet kusov, ktorý momentálne vlastníte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_cisty_v9")
+        skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker_pure}, ktorý momentálne reálne vlastníte:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_definitivny_overeny_krokovanim")
         
-        # 💡 ÚPLNE NOVÉ PANDAS POROVNANIE - Zmaže z CSV bodky aj medzery, takže BRK B z CSV sadne na BRK.B z menu!
