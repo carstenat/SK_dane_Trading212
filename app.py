@@ -97,7 +97,7 @@ if uploaded_files:
     
     # ROČNÉ PREHĽADY
     roky_zoznam = sorted(list(vysledky_po_rokoch.keys()), reverse=True)
-    tabs = st.tabs([f"📅 Rok {r}" for r in roky_zoznam])
+    st.tabs_obj = st.tabs([f"📅 Rok {r}" for r in roky_zoznam])
     
     for index, r in enumerate(roky_zoznam):
         v = vysledky_po_rokoch[r]
@@ -109,7 +109,7 @@ if uploaded_files:
         realne_odvody_akcie = round(priznany_zisk_po_oslobodeni * 0.14, 2)
         celkovo = realna_dan_uroky + realna_dan_akcie + realne_odvody_akcie
         
-        with tabs[index]:
+        with st.tabs_obj[index]:
             col1, col2 = st.columns(2)
             col1.metric("Celková daňová povinnosť", f"{celkovo:.2f} EUR")
             col2.metric("Dlhodobý zisk (BEZ DANE)", f"{v['zisk_po_roku']:.2f} EUR")
@@ -131,20 +131,18 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 INDIVIDUÁLNY FILTER S PREPÍNAČOM NA SKRYTIE STARÝCH OPERÁCIÍ
+    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR - OPRAVENÉ ZAROVNANIE RÍADKOV
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     st.write(f"Aplikácia analyzovala váš skutočný aktuálny otvorený sklad k dnešnému dňu ({datetime.now().strftime('%d.%m.%Y')}).")
     
-    # NOVINKA: Kamoš si sám vyberie, či chce vidieť len to, čo má reálne otvorené teraz v mobile
     skryt_stare = st.checkbox("⚙️ Skryť akcie, ktoré som už kompletne predal (Zobraziť len aktuálne portfólio)", value=True)
     
     aktivne_tickery = []
     for t in sklad.keys():
         celkovo_ks = sum(n['shares'] for n in sklad[t])
         if skryt_stare:
-            # Ak je zaškrtnuté, ukážeme len firmy, kde zostalo aspoň 0.49 kusa (vyčistí Oracle a iné drobné zostatky)
             if celkovo_ks >= 0.49:
                 aktivne_tickery.append(t)
         else:
@@ -201,3 +199,4 @@ if uploaded_files:
                 for pm in podrobnosti_mlade:
                     st.write(f"• Fragment o veľkosti **{pm['shares']:.5f} ks** (nakúpený {pm['date']}) bude oslobodený o **{pm['dni_cakat']} dní**.")
     else:
+        st.info("Vo vašej histórii momentálne nezostali žiadne otvorené pozície akcií (všetko je predané).")
