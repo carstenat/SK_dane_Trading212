@@ -79,14 +79,14 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v155")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v160")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v155")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v160")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v155")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v160")
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
@@ -135,7 +135,7 @@ if uploaded_files:
                 list_cakania = []
                 
                 for n in sklad_aktualny:
-                    if potrebné_ks_check_v2 := (potrebne_ks < 1e-5):
+                    if potrebne_ks < 1e-5:
                         break
                     vziat_ks = min(n['shares'], potrebne_ks)
                     potrebne_ks -= vziat_ks
@@ -162,16 +162,17 @@ if uploaded_files:
                         list_dat_oslobodenia.append((nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y'))
                         list_cakania.append(f"⏳ {365 - vek_dni} dní")
                 
-                # Zaokrúhlenie pre absolútnu presnosť kariet
                 ks_bez_dane = round(ks_bez_dane, 5)
                 ks_mlade = round(ks_mlade, 5)
                 
                 st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
                 st.progress(float(ks_bez_dane / skutocny_stav))
                 
-                # 🔓 ZELENÁ KARTA (Vždy na obrazovke)
+                # 🛡️ OŠETRENÁ ZELENÁ KARTA (BEZPEČNÁ SYNTAX)
                 if aktualna_cena > 0:
                     trhova_hodnota_safe = ks_bez_dane * aktualna_cena
                     cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
                     st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
                 else:
+                    st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks**")
+                
