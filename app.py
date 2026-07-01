@@ -143,11 +143,10 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: DNEŠNÝ OPTIMALIZÁTOR - PURE PYTHON ZO SUROVÝCH NÁKUPOV
+    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - UZAMKNUTÝ FORMULÁR (100% FUNKČNÝ)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
-    st.write("Vyberte firmu zo zoznamu a zadajte aktuálny otvorený stav z platformy Trading 212.")
     
     zoznam_vsetkych_tickerov = []
     for _, riadok in df.iterrows():
@@ -163,19 +162,23 @@ if uploaded_files:
     if not zoznam_vsetkych_tickerov:
         st.info("V nahratých súboroch sa nenachádzajú žiadne nákupné transakcie.")
     else:
-        ponuka_pre_menu = []
-        mapovanie = {}
-        for t in zoznam_vsetkych_tickerov:
-            text_polozky = f"{t} - {databaza_mien.get(t, 'Spoločnosť z platformy')}"
-            ponuka_pre_menu.append(text_polozky)
-            mapovanie[text_polozky] = t
+        # 🔥 FORMULÁROVÝ BLOK - PRINÚTI SERVER DRŽAŤ INPUT V PAMÄTI
+        with st.form(key="daňový_kontrolný_formulár"):
+            ponuka_pre_menu = []
+            mapovanie = {}
+            for t in zoznam_vsetkych_tickerov:
+                text_polozky = f"{t} - {databaza_mien.get(t, 'Spoločnosť z platformy')}"
+                ponuka_pre_menu.append(text_polozky)
+                mapovanie[text_polozky] = t
+                
+            vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
+            vybrany_ticker = mapovanie[vybrany_text]
             
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
-        vybrany_ticker = mapovanie[vybrany_text]
-        
-        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne reálne vlastníte:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_t212_overeny_testom")
-        
-        if skutocny_stav_mobil > 0:
+            skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne reálne vlastníte:", min_value=0.0, value=0.0, step=0.00001, format="%.5f")
+            
+            tlacidlo_spustenia = st.form_submit_button(label="🚀 Spustiť daňovú kontrolu pozície")
+            
+        # VÝPOČET SA SPUSTÍ AŽ PO KLIKNUTÍ NA TLAČIDLO (STOP ZAMŔZANIU)
+        if tlacidlo_spustenia and skutocny_stav_mobil > 0:
             ciste_nakupy_tickeru = []
-            for _, riadok in df.iterrows():
-                typ_c = str(riadok['Action']).lower()
+
