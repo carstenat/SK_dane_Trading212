@@ -18,25 +18,53 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    # Vyčistíme a zjednotíme stĺpec Ticker
+    # Zjednotenie textu tickerov
     df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", "").str.replace(".", "").str.replace(" ", "").str.upper()
     
-    # Vytiahneme iba zoznam tickerov, ktoré prešli nákupom
-    df_nakupov_vsetky = df[df['Action'].str.lower().str.contains('buy|investment|deposit', na=False)]
-    zoznam_tickerov = sorted(list(df_nakupov_vsetky['Ticker_Clean'].unique()))
+    # Filtrujeme iba transakcie, ktoré menia stav skladu (Buy a Sell)
+    df_akcie = df[df['Action'].str.lower().str.contains('buy|investment|deposit|sell|divestment|withdrawal|rebalancing', na=False)].copy()
+    zoznam_tickerov = sorted(list(df_akcie['Ticker_Clean'].unique()))
     
     if not zoznam_tickerov:
-        st.info("V nahratých súboroch sa nenachádzajú žiadne nákupné transakcie.")
+        st.info("V nahratých súboroch sa nenachádzajú žiadne transakcie akcií.")
     else:
         vybrany_ticker = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", zoznam_tickerov)
         
-        skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker}, ktorý momentálne vidíte na platforme:", min_value=0.0, value=0.0, step=0.00001, format="%.5f")
+        skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker}, ktorý momentálne reálne vidíte na platforme:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_autenticky_fifo_fix")
         
-        if skutocny_stav > 0:
-            # Vytiahneme nákupy iba pre túto konkrétnu vybranú akciu
-            df_filtracia = df_nakupov_vsetky[df_nakupov_vsetky['Ticker_Clean'] == vybrany_ticker].copy()
-            df_filtracia = df_filtracia.sort_values(by='Time').reset_index(drop=True)
+        # 1. REKONŠTRUKCIA SKUTREČNÉHO SKLADU POMOCOU HISTORICKÉHO FIFO
+        df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker].copy()
+        df_ticker = df_ticker.sort_values(by='Time').reset_index(drop=True)
+        
+        sklad_aktualny = []
+        
+        for _, riadok in df_ticker.iterrows():
+            typ = str(riadok['Action']).lower()
+            shares = float(riadok['No. of shares']) if pd.notna(riadok['No. of shares']) else 0.0
+            datum = riadok['Time']
             
+            if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
+                if shares > 0:
+                    sklad_aktualny.append({'shares': shares, 'date': datum})
+            elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
+                predat_este = abs(shares)
+                
+                # Odpočítame predané kusy z najstarších nákupov (FIFO)
+                temp_sklad = []
+                for balicek in sklad_aktualny:
+                    if predat_este <= 1e-6:
+                        temp_sklad.append(balicek)
+                    else:
+                        if balicek['shares'] <= predat_este:
+                            predat_este -= balicek['shares']
+                        else:
+                            balicek['shares'] -= predat_este
+                            predat_este = 0.0
+                            temp_sklad.append(balicek)
+                sklad_aktualny = temp_sklad
+        
+        # 2. KROK: PREPOČET PRE ZADANÉ MNOŽSTVO NA ZÁKLADE REÁLNEHO ZOSTATKU
+        if skutocny_stav > 0:
             potrebne_ks = skutocny_stav
             dnes = datetime.now()
             ks_bez_dane = 0.0
@@ -48,32 +76,30 @@ if uploaded_files:
             list_dat_oslobodenia = []
             list_cakania = []
             
-            # Naplníme balíčky chronologicky od najstarších (Pravidlo FIFO)
-            for _, r_nakup in df_filtracia.iterrows():
+            # Prechádzame iba tie nákupné balíčky, ktoré reálne prežili minulé predaje
+            for n in sklad_aktualny:
                 if potrebne_ks <= 1e-6:
                     break
                 
-                sh_c = float(r_nakup['No. of shares']) if pd.notna(r_nakup['No. of shares']) else 0.0
-                if sh_c > 0:
-                    vziat_ks = min(sh_c, potrebne_ks)
-                    potrebne_ks -= vziat_ks
-                    
-                    nakup_pure = pd.to_datetime(r_nakup['Time']).to_pydatetime()
-                    vek_dni = (dnes.date() - nakup_pure.date()).days
-                    
-                    list_dat_nakupu.append(nakup_pure.strftime('%d.%m.%Y'))
-                    list_mnozstiev.append(f"{vziat_ks:.5f}")
-                    
-                    if vek_dni >= 365:
-                        ks_bez_dane += vziat_ks
-                        list_stavov.append("🟢 Bez dane (Nad 1 rok)")
-                        list_dat_oslobodenia.append("Už oslobodené")
-                        list_cakania.append("0 dní")
-                    else:
-                        ks_mlade += vziat_ks
-                        list_stavov.append("🔴 Zdaňuje sa (Mladá akcia)")
-                        list_dat_oslobodenia.append((nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y'))
-                        list_cakania.append(f"⏳ {365 - vek_dni} dní")
+                vziat_ks = min(n['shares'], potrebne_ks)
+                potrebne_ks -= vziat_ks
+                
+                nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
+                vek_dni = (dnes.date() - nakup_pure.date()).days
+                
+                list_dat_nakupu.append(nakup_pure.strftime('%d.%m.%Y'))
+                list_mnozstiev.append(f"{vziat_ks:.5f}")
+                
+                if vek_dni >= 365:
+                    ks_bez_dane += vziat_ks
+                    list_stavov.append("🟢 Bez dane (Nad 1 rok)")
+                    list_dat_oslobodenia.append("Už oslobodené")
+                    list_cakania.append("0 dní")
+                else:
+                    ks_mlade += vziat_ks
+                    list_stavov.append("🔴 Zdaňuje sa (Mladá akcia)")
+                    list_dat_oslobodenia.append((nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y'))
+                    list_cakania.append(f"⏳ {365 - vek_dni} dní")
             
             st.markdown("---")
             c1, c2 = st.columns(2)
@@ -89,6 +115,7 @@ if uploaded_files:
                 "Zostáva čakať": list_cakania
             })
             st.dataframe(tovarna_tabulky, use_container_width=True, hide_index=True)
-            st.info("💡 **Ako čítať tabuľku:** Platforma Trading 212 predáva akcie chronologicky od najstarších (pravidlo FIFO). Sledujte zelené riadky – tie predáte bezpečne bez odovzdania eura štátu.")
+            st.info("💡 **Ako čítať tabuľku:** Platforma Trading 212 predáva akcie chronologicky od najstarších (pravidlo FIFO).")
         else:
             st.info("Pre zobrazenie daňového breakdownu zadajte do políčka vyššie množstvo väčšie ako 0.")
+
