@@ -5,33 +5,50 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 PRO Daňový Asistent & Optimalizátor", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 🎨 NATVRDO PREVOLENÝ VYSOKO-KONTRASTNÝ FINTECH DESIGN (STABILNÝ)
+# 🎨 PREPÍNAČ PRE DARK / LIGHT MODE (DEFAULT SVETLÝ, PREPÍNATEĽNÝ)
 # =========================================================================
-st.markdown("""
-    <style>
-    .stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; font-size: 14px !important; }
-    h1 { font-size: 24px !important; font-weight: 700 !important; color: #FFFFFF !important; margin-bottom: 5px !important; }
-    h2 { font-size: 19px !important; font-weight: 600 !important; color: #F8FAFC !important; margin-top: 15px !important; }
-    h3 { font-size: 16px !important; font-weight: 600 !important; color: #FFFFFF !important; }
-    p, label, span { color: #E2E8F0 !important; }
-    
-    div[data-testid="stMetric"] {
-        background-color: #1E293B !important;
-        border: 2px solid #475569 !important;
-        border-radius: 12px !important;
-        padding: 14px 18px !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-    }
-    div[data-testid="stMetricValue"] { color: #38BDF8 !important; font-size: 22px !important; font-weight: 800 !important; }
-    div[data-testid="stMetricLabel"] { color: #CBD5E1 !important; font-size: 13px !important; font-weight: 600 !important; }
-    
-    .stTabs [data-baseweb="tab-list"] { background-color: #1E293B !important; border: 1px solid #475569 !important; border-radius: 10px; padding: 4px; }
-    .stTabs [data-baseweb="tab"] { color: #94A3B8 !important; font-weight: 600 !important; }
-    .stTabs [aria-selected="true"] { background-color: #0EA5E9 !important; color: #FFFFFF !important; font-weight: 700 !important; }
-    
-    .stDataFrame div { background-color: #111827 !important; color: #F8FAFC !important; border-radius: 8px; }
-    </style>
-""", unsafe_allow_html=True)
+st.sidebar.header("⚙️ Vzhľad a Vychytávky")
+dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
+
+if dark_mode:
+    st.markdown("""
+        <style>
+        .stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; font-size: 14px !important; }
+        h1 { font-size: 24px !important; font-weight: 700 !important; color: #FFFFFF !important; margin-bottom: 5px !important; }
+        h2 { font-size: 19px !important; font-weight: 600 !important; color: #F8FAFC !important; margin-top: 15px !important; }
+        h3 { font-size: 16px !important; font-weight: 600 !important; color: #FFFFFF !important; }
+        p, label, span { color: #E2E8F0 !important; }
+        
+        div[data-testid="stMetric"] {
+            background-color: #1E293B !important;
+            border: 2px solid #475569 !important;
+            border-radius: 12px !important;
+            padding: 14px 18px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+        }
+        div[data-testid="stMetricValue"] { color: #38BDF8 !important; font-size: 22px !important; font-weight: 800 !important; }
+        div[data-testid="stMetricLabel"] { color: #CBD5E1 !important; font-size: 13px !important; font-weight: 600 !important; }
+        
+        .stTabs [data-baseweb="tab-list"] { background-color: #1E293B !important; border: 1px solid #475569 !important; border-radius: 10px; padding: 4px; }
+        .stTabs [data-baseweb="tab"] { color: #94A3B8 !important; font-weight: 600 !important; }
+        .stTabs [aria-selected="true"] { background-color: #0EA5E9 !important; color: #FFFFFF !important; font-weight: 700 !important; }
+        
+        .stDataFrame div { background-color: #111827 !important; color: #F8FAFC !important; border-radius: 8px; }
+        </style>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+        <style>
+        /* Moderný čistý svetlý dizajn */
+        div[data-testid="stMetric"] {
+            background-color: #F8FAFC !important;
+            border: 1px solid #CBD5E1 !important;
+            border-radius: 12px !important;
+            padding: 14px 18px !important;
+        }
+        div[data-testid="stMetricValue"] { color: #0284C7 !important; font-weight: 800 !important; }
+        </style>
+    """, unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
 st.write("Profesionálny nástroj na kontrolu časového testu pred predajom a automatickú ročnú daňovú uzávierku.")
@@ -46,6 +63,12 @@ if uploaded_files:
     df = pd.concat(zoznam_df, ignore_index=True)
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
+    
+    # 🛡️ UNIVERZÁLNE OŠETRENIE ČÍSELNÝCH TYPOV (Zabráni pádu na TypeError)
+    df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
+    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
+    df['Result'] = pd.to_numeric(df['Result'], errors='coerce').fillna(0.0)
+    df['Withholding tax'] = pd.to_numeric(df['Withholding tax'], errors='coerce').fillna(0.0)
     
     # Odfiltrujeme vklady/úroky bez tickeru hneď na úvode pre stabilitu optimalizátora
     df_filtrat = df[df['Ticker'].notna()].copy()
@@ -88,9 +111,9 @@ if uploaded_files:
         
         col_input1, col_input2 = st.columns(2)
         with col_input1:
-            skutocny_stav = st.number_input("Počet kusov vlastnených na T212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_pro_v38")
+            skutocny_stav = st.number_input("Počet kusov vlastnených na T212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_pro_v39")
         with col_input2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie (EUR):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v38")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie (EUR):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v39")
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].copy()
         df_ticker = df_ticker.sort_values(by='Time').reset_index(drop=True)
@@ -98,8 +121,8 @@ if uploaded_files:
         sklad_aktualny = []
         for _, riadok in df_ticker.iterrows():
             typ = str(riadok['Action']).lower()
-            shares = float(riadok['No. of shares']) if pd.notna(riadok['No. of shares']) else 0.0
-            total = float(riadok['Total']) if pd.notna(riadok['Total']) else 0.0
+            shares = float(riadok['No. of shares'])
+            total = float(riadok['Total'])
             datum = riadok['Time']
             
             if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
@@ -166,21 +189,3 @@ if uploaded_files:
             
             pomer_safe = ks_bez_dane / skutocny_stav
             st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
-            st.progress(float(pomer_safe))
-            
-            c1, c2 = st.columns(2)
-            
-            # Zelená karta (Vykreslená nezávisle)
-            if aktualna_cena > 0:
-                teoreticka_hodnota_safe = ks_bez_dane * aktualna_cena
-                odhadovany_zisk_safe = teoreticka_hodnota_safe - vydavok_safe_balika
-                c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**\nHodnota: {teoreticka_hodnota_safe:.2f} EUR (Čistý zisk: +{odhadovany_zisk_safe:.2f} EUR)")
-            else:
-                c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**")
-            
-            # 🔓 ŽLTÁ KARTA: Vykreslená úplne na priamo bez vnorených podmienok
-            if aktualna_cena > 0 and ks_mlade > 0:
-                prijem_mlade = ks_mlade * aktualna_cena
-                zisk_mlade = max(0.0, prijem_mlade - vydavok_mladeho_balika)
-                dan_mlade = round(zisk_mlade * 0.19, 2)
-                odvody_mlade = round(zisk_mlade * 0.14, 2)
