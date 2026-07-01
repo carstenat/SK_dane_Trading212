@@ -60,7 +60,7 @@ if uploaded_files:
     df['Result'] = pd.to_numeric(df['Result'], errors='coerce').fillna(0.0)
     df['Withholding tax'] = pd.to_numeric(df['Withholding tax'], errors='coerce').fillna(0.0)
     
-    # 🛡️ SUROVÉ A BEZPEČNÉ PÁROVANIE: Necháme ticker presne tak, ako ho stvoril broker Trading 212
+    # Surové párovanie tickerov bez orezávania prípon
     df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
     
     databaza_mien = {}
@@ -90,16 +90,15 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v120")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v125")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            skutocny_stav = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v120")
+            skutocny_stav = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v125")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v120")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v125")
         
-        # 🛡️ Rekonštrukcia skladu s garantovaným spárovaním surového tickeru
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
         sklad_aktualny = []
@@ -137,6 +136,7 @@ if uploaded_files:
             list_dat_oslobodenia = []
             list_cakania = []
             
+            # 🛡️ STABILNÁ OPRAVA: Odstránený prázdny if blok na riadku 135
             for n in sklad_aktualny:
                 if potrebne_ks < 1e-5:
                     break
@@ -172,3 +172,4 @@ if uploaded_files:
             c1, c2 = st.columns(2)
             
             if aktualna_cena > 0:
+                trhova_hodnota_safe = ks_bez_dane * aktualna_cena
