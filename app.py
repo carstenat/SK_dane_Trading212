@@ -6,7 +6,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 Daňová Kalkulačka", page_icon="📈", layout="wide")
 
 st.title("📈 Súkromný Daňový Asistent a Optimalizátor pre Trading 212 (SR)")
-st.write("Nahrajte svoje CSV exporty z Trading 212 a získajte ročný daňový manuál + checker pre bezpečný predaj akcií.")
+st.write("Nahrajte svoje CSV exporty z Trading 212 a získajte ročný daňový manuál + checker pre safe predaj akcií.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV súbory (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
 
@@ -97,9 +97,9 @@ if uploaded_files:
 
     st.success("🚀 Analýza úspešne dokončená!")
     
-    # ROČNÉ PREHĽADY
+    # ROČNÉ PREHĽADY (OPRAVENÉ: Použité bezpečné lokálne pole moje_tabs)
     roky_zoznam = sorted(list(vysledky_po_rokoch.keys()), reverse=True)
-    st.tabs_obj = st.tabs([f"📅 Rok {r}" for r in roky_zoznam])
+    moje_tabs = st.tabs([f"📅 Rok {r}" for r in roky_zoznam])
     
     for index, r in enumerate(roky_zoznam):
         v = vysledky_po_rokoch[r]
@@ -111,7 +111,7 @@ if uploaded_files:
         realne_odvody_akcie = round(priznany_zisk_po_oslobodeni * 0.14, 2)
         celkovo = realna_dan_uroky + realna_dan_akcie + realne_odvody_akcie
         
-        with st.tabs_obj[index]:
+        with moje_tabs[index]:
             col1, col2 = st.columns(2)
             col1.metric("Celková daňová povinnosť", f"{celkovo:.2f} EUR", 
                         help="Celková suma dane z úrokov a krátkodobých ziskov nad limit 500€ + zdravotné odvody. Toto musíte zaplatiť štátu.")
@@ -135,7 +135,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR OVERENÝ STAVOM Z APLIKÁCIE TRADING 212
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - STABILNÁ VERZIA
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -190,4 +190,5 @@ if uploaded_files:
                     })
                 else:
                     ks_mlade += n['shares']
-                    dni_cakat = 365 - vek_dni # OPRAVENÉ: Absolútne čistá matematika bez preklepov
+                    dni_cakat = 365 - vek_dni
+                    dat_oslobodenia = (n['date'] + pd.Timedelta(days=365)).strftime('%d.%m.%Y')
