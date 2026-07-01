@@ -2,12 +2,12 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-st.set_page_config(page_title="Trading 212 Daňová Kalkulačka", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Trading 212 Optimalizátor", page_icon="📈", layout="wide")
 
-st.title("📈 Súkromný Daňový Asistent a Optimalizátor pre Trading 212 (SR)")
-st.write("Nahrajte svoje CSV exporty z Trading 212 a získajte ročný daňový manuál + checker pre bezpečný predaj akcií.")
+st.title("📈 Súkromný Optimalizátor pre Trading 212 (SR)")
+st.write("Tento nástroj slúži výhradne na kontrolu časového testu (1 rok) pred plánovaným predajom akcií.")
 
-uploaded_files = st.file_uploader("Sem presuňte vaše CSV súbory (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
+uploaded_files = st.file_uploader("Nahrajte vaše CSV súbory z Trading 212:", type=["csv"], accept_multiple_files=True)
 
 if uploaded_files:
     zoznam_df = []
@@ -18,167 +18,77 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    df['Ticker'] = df['Ticker'].astype(str).fillna('').str.strip()
+    # Vyčistíme a zjednotíme stĺpec Ticker
+    df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", "").str.replace(".", "").str.replace(" ", "").str.upper()
     
-    sklad_historicky = {}
-    databaza_mien = {}
-    vysledky_po_rokoch = {}
+    # Vytiahneme iba zoznam tickerov, ktoré prešli nákupom
+    df_nakupov_vsetky = df[df['Action'].str.lower().str.contains('buy|investment|deposit', na=False)]
+    zoznam_tickerov = sorted(list(df_nakupov_vsetky['Ticker_Clean'].unique()))
     
-    # 1. KROK: HISTORICKÁ FIFO MATEMATIKA PRE ROČNÉ PREHĽADY
-    for _, riadok in df.iterrows():
-        typ = str(riadok['Action']).lower()
-        ticker_surovy = str(riadok['Ticker'])
-        full_name = str(riadok.get('Name', 'Neznáma spoločnosť')).strip()
-        
-        if not ticker_surovy or ticker_surovy == 'nan':
-            continue
-            
-        ticker = ticker_surovy.replace("US ", "").replace("_US", "").replace("_US_EQ", "").replace("_EQ", "").replace(".US", "").strip()
-        ticker = ticker.replace("_", ".").replace(" ", ".").upper()
-        
-        if pd.notna(riadok.get('Name')) and ticker != 'nan' and ticker:
-            if ticker not in databaza_mien or len(full_name) > len(databaza_mien[ticker]):
-                databaza_mien[ticker] = full_name
-        
-        shares = float(riadok['No. of shares']) if pd.notna(riadok['No. of shares']) else 0.0
-        total = float(riadok['Total']) if pd.notna(riadok['Total']) else 0.0
-        result = float(riadok['Result']) if pd.notna(riadok['Result']) else 0.0
-        tax = float(riadok['Withholding tax']) if pd.notna(riadok['Withholding tax']) else 0.0
-        datum = riadok['Time']
-        rok = datum.year
-        
-        if rok not in vysledky_po_rokoch:
-            vysledky_po_rokoch[rok] = {'uroky': 0.0, 'div_brutto': 0.0, 'div_dan': 0.0, 'zisk_do_roka': 0.0, 'zisk_po_roku': 0.0, 'prijmy_kratkodobe': 0.0, 'vydavky_kratkodobe': 0.0}
-            
-        if 'interest on cash' in typ:
-            vysledky_po_rokoch[rok]['uroky'] += total
-            continue
-        if 'dividend' in typ:
-            vysledky_po_rokoch[rok]['div_brutto'] += (total + tax)
-            vysledky_po_rokoch[rok]['div_dan'] += tax
-            continue
-            
-        if ('sell' in typ or 'divestment' in typ or 'withdrawal' in typ) and abs(result) < 2.0 and total < 10.0:
-            continue
-            
-        if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
-            if ticker not in sklad_historicky: 
-                sklad_historicky[ticker] = []
-            sklad_historicky[ticker].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares if shares > 0 else 0.0})
-            
-        elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
-            predat_este = abs(shares)
-            riadok_po_roku = 0.0
-            riadok_do_roka = 0.0
-            riadok_vydavok = 0.0
-            
-            if ticker in sklad_historicky and sklad_historicky[ticker]:
-                temp_sklad = list(sklad_historicky[ticker])
-                sklad_historicky[ticker] = []
-                
-                for najstarsie in temp_sklad:
-                    if predat_este <= 1e-6:
-                        sklad_historicky[ticker].append(najstarsie)
-                        continue
-                        
-                    vek = datum - najstarsie['date']
-                    splnil_rok = vek.days >= 365
-                    
-                    if najstarsie['shares'] <= predat_este:
-                        pomer = najstarsie['shares'] / abs(shares)
-                        if splnil_rok: riadok_po_roku += (result * pomer)
-                        else:
-                            riadok_do_roka += (result * pomer)
-                            riadok_vydavok += (najstarsie['shares'] * najstarsie['cena_za_kus'])
-                        predat_este -= najstarsie['shares']
-                    else:
-                        pomer = predat_este / abs(shares)
-                        if splnil_rok: riadok_po_roku += (result * pomer)
-                        else:
-                            riadok_do_roka += (result * pomer)
-                            riadok_vydavok += (predat_este * najstarsie['cena_za_kus'])
-                        
-                        zostatok_shares = najstarsie['shares'] - predat_este
-                        sklad_historicky[ticker].append({'shares': zostatok_shares, 'date': najstarsie['date'], 'cena_za_kus': najstarsie['cena_za_kus']})
-                        predat_este = 0.0
-                        
-            vysledky_po_rokoch[rok]['zisk_do_roka'] += riadok_do_roka
-            vysledky_po_rokoch[rok]['zisk_po_roku'] += riadok_po_roku
-            if riadok_do_roka != 0:
-                vysledky_po_rokoch[rok]['prijmy_kratkodobe'] += total
-                vysledky_po_rokoch[rok]['vydavky_kratkodobe'] += riadok_vydavok
-
-    st.success("🚀 Analýza histórie úspešne dokončená!")
-    
-    # ROČNÉ PREHĽADY HORE
-    roky_zoznam = sorted(list(vysledky_po_rokoch.keys()), reverse=True)
-    moje_tabs = st.tabs([f"📅 Rok {r}" for r in roky_zoznam])
-    
-    for index, r in enumerate(roky_zoznam):
-        v = vysledky_po_rokoch[r]
-        oslobodeny_zisk = max(0.0, v['zisk_do_roka'])
-        priznany_zisk_po_oslobodeni = max(0.0, oslobodeny_zisk - 500.0) if oslobodeny_zisk > 0 else 0.0
-        
-        realna_dan_uroky = round(v['uroky'] * 0.19, 2)
-        realna_dan_akcie = round(priznany_zisk_po_oslobodeni * 0.19, 2)
-        realne_odvody_akcie = round(priznany_zisk_po_oslobodeni * 0.14, 2)
-        celkovo = realna_dan_uroky + realna_dan_akcie + realne_odvody_akcie
-        
-        with moje_tabs[index]:
-            col1, col2 = st.columns(2)
-            col1.metric("Celková daňová povinnosť", f"{celkovo:.2f} EUR", help="Daň z úrokov a krátkodobých ziskov nad limit 500€ + zdravotné odvody.")
-            col2.metric("Dlhodobý zisk (BEZ DANE)", f"{v['zisk_po_roku']:.2f} EUR", help="Zisk z akcií držaných nad 1 rok. Sú oslobodené.")
-            st.markdown("---")
-            st.subheader("📑 VIII. ODDIEL - Kapitálový majetok")
-            st.write(f"**Riadok 2 (Úroky z vkladov):** Príjmy: `{v['uroky']:.2f} EUR` | Daň: `{realna_dan_uroky:.2f} EUR`")
-            st.subheader("📑 PRÍLOHA č. 2 - Dividendy")
-            st.write(f"**Riadok 1:** Príjem Brutto: `{v['div_brutto']:.2f} EUR` | Daň zaplatená v zahraničí: `{v['div_dan']:.2f} EUR`")
-            st.subheader("📑 X. ODDIEL - Ostatné príjmy (§ 8)")
-            if v['zisk_do_roka'] <= 0:
-                st.info(f"Utrpeli ste stratu ({v['zisk_do_roka']:.2f} EUR). Netreba nič vypĺňať.")
-            else:
-                if prepocet_ok := (priznany_zisk_po_oslobodeni == 0):
-                    st.info(f"Zisk {v['zisk_do_roka']:.2f} EUR nepresiahol 500 EUR. Je oslobodený.")
-                else:
-                    pomer = priznany_zisk_po_oslobodeni / v['zisk_do_roka']
-                    st.write(f"**Riadok 5 (Stĺpec 1 - Príjmy):** `{v['prijmy_kratkodobe']*pomer:.2f} EUR`")
-                    st.write(f"**Riadok 5 (Stĺpec 2 - Výdavky):** `{v['vydavky_kratkodobe']*pomer:.2f} EUR`")
-                    st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
-
-    # =========================================================================
-    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - ČISTÁ ARCHITEKTÚRA BEZ RIZIKA ZLYHANIA
-    # =========================================================================
-    st.markdown("##")
-    st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
-    st.write("Vyberte firmu zo zoznamu a zadajte aktuálny otvorený stav, ktorý vidíte v platforme Trading 212.")
-    
-    zoznam_vsetkych_tickerov = []
-    for _, riadok in df.iterrows():
-        typ_c = str(riadok['Action']).lower()
-        if 'buy' in typ_c or 'investment' in typ_c or 'deposit' in typ_c:
-            tick_c = str(riadok['Ticker']).replace("US ", "").replace("_US", "").replace("_US_EQ", "").replace("_EQ", "").replace(".US", "").strip().replace("_", "").replace(".", "").replace(" ", "").upper()
-            if tick_c and tick_c != 'nan' and tick_c not in zoznam_vsetkych_tickerov:
-                zoznam_vsetkych_tickerov.append(tick_c)
-                
-    zoznam_vsetkych_tickerov = sorted(list(set(zoznam_vsetkych_tickerov)))
-    
-    if not zoznam_vsetkych_tickerov:
+    if not zoznam_tickerov:
         st.info("V nahratých súboroch sa nenachádzajú žiadne nákupné transakcie.")
     else:
-        # 🔓 BEZPEČNÉ BUDOVANIE PONUKY: Žiadne riskantné vnorené prepisovanie textov
-        ponuka_pre_menu = []
-        mapovanie_tickerov = {}
-        for t in zoznam_vsetkych_tickerov:
-            pekné_meno = databaza_mien.get(t, "Spoločnosť z platformy")
-            text_riadku = f"{t} - {pekné_meno}"
-            ponuka_pre_menu.append(text_riadku)
-            mapovanie_tickerov[text_riadku] = t
+        vybrany_ticker = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", zoznam_tickerov)
+        
+        skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker}, ktorý momentálne vidíte na platforme:", min_value=0.0, value=0.0, step=0.00001, format="%.5f")
+        
+        if skutocny_stav > 0:
+            # Vytiahneme nákupy iba pre túto konkrétnu vybranú akciu
+            df_filtracia = df_nakupov_vsetky[df_nakupov_vsetky['Ticker_Clean'] == vybrany_ticker].copy()
+            df_filtracia = df_filtracia.sort_values(by='Time').reset_index(drop=True)
             
-        ponuka_pre_menu = sorted(ponuka_pre_menu)
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
-        
-        # 🔓 LOGICKÁ OPRAVA: Ticker vytiahneme priamo zo slovníka, úplne sme vyhodili nebezpečný .split().strip()
-        vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
-        
-        skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker_pure}, ktorý momentálne reálne vlastníte:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_definitivny_overeny_krokovanim")
-        
+            potrebne_ks = skutocny_stav
+            dnes = datetime.now()
+            ks_bez_dane = 0.0
+            ks_mlade = 0.0
+            
+            list_dat_nakupu = []
+            list_mnozstiev = []
+            list_stavov = []
+            list_dat_oslobodenia = []
+            list_cakania = []
+            
+            # Naplníme balíčky chronologicky od najstarších (Pravidlo FIFO)
+            for _, r_nakup in df_filtracia.iterrows():
+                if potrebne_ks <= 1e-6:
+                    break
+                
+                sh_c = float(r_nakup['No. of shares']) if pd.notna(r_nakup['No. of shares']) else 0.0
+                if sh_c > 0:
+                    vziat_ks = min(sh_c, potrebne_ks)
+                    potrebne_ks -= vziat_ks
+                    
+                    nakup_pure = pd.to_datetime(r_nakup['Time']).to_pydatetime()
+                    vek_dni = (dnes.date() - nakup_pure.date()).days
+                    
+                    list_dat_nakupu.append(nakup_pure.strftime('%d.%m.%Y'))
+                    list_mnozstiev.append(f"{vziat_ks:.5f}")
+                    
+                    if vek_dni >= 365:
+                        ks_bez_dane += vziat_ks
+                        list_stavov.append("🟢 Bez dane (Nad 1 rok)")
+                        list_dat_oslobodenia.append("Už oslobodené")
+                        list_cakania.append("0 dní")
+                    else:
+                        ks_mlade += vziat_ks
+                        list_stavov.append("🔴 Zdaňuje sa (Mladá akcia)")
+                        list_dat_oslobodenia.append((nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y'))
+                        list_cakania.append(f"⏳ {365 - vek_dni} dní")
+            
+            st.markdown("---")
+            c1, c2 = st.columns(2)
+            c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**")
+            c2.warning(f"🔒 MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes):\n**{ks_mlade:.5f} ks**")
+            
+            st.markdown("### 📋 Detailný rozpis balíčkov na vašom sklade:")
+            tovarna_tabulky = pd.DataFrame({
+                "Dátum nákupu": list_dat_nakupu,
+                "Množstvo (ks)": list_mnozstiev,
+                "Daňový stav": list_stavov,
+                "Dátum oslobodenia": list_dat_oslobodenia,
+                "Zostáva čakať": list_cakania
+            })
+            st.dataframe(tovarna_tabulky, use_container_width=True, hide_index=True)
+            st.info("💡 **Ako čítať tabuľku:** Platforma Trading 212 predáva akcie chronologicky od najstarších (pravidlo FIFO). Sledujte zelené riadky – tie predáte bezpečne bez odovzdania eura štátu.")
+        else:
+            st.info("Pre zobrazenie daňového breakdownu zadajte do políčka vyššie množstvo väčšie ako 0.")
