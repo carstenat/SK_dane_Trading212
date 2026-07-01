@@ -67,7 +67,10 @@ if uploaded_files:
             riadok_vydavok = 0.0
             
             if ticker in sklad and sklad[ticker]:
-                while predat_este > 0 and sklad[ticker]:
+                while predat_este > 0:
+                    if not sklad[ticker]: # OPRAVENÉ: Ak je sklad prázdny, okamžite vyskoč z histórie a nezasekávaj web!
+                        break
+                        
                     najstarsie = sklad[ticker][0]
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
@@ -97,7 +100,7 @@ if uploaded_files:
 
     st.success("🚀 Analýza úspešne dokončená!")
     
-    # ROČNÉ PREHĽADY (OPRAVENÉ: Použité bezpečné lokálne pole moje_tabs)
+    # ROČNÉ PREHĽADY
     roky_zoznam = sorted(list(vysledky_po_rokoch.keys()), reverse=True)
     moje_tabs = st.tabs([f"📅 Rok {r}" for r in roky_zoznam])
     
@@ -135,7 +138,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - STABILNÁ VERZIA
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR S CHROMATICKOU DAŇOVOU TABUĽKOU
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -166,7 +169,7 @@ if uploaded_files:
             for n in nákupy_vsetky:
                 if potrebne_ks <= 0:
                     break
-                vziat_ks = min(n['shares'], potrebne_ks)
+                vziat_ks = min(n['shares'], _ks := potrebne_ks)
                 nákupy_skutocne.append({'shares': vziat_ks, 'date': n['date']})
                 potrebne_ks -= vziat_ks
             
@@ -190,5 +193,3 @@ if uploaded_files:
                     })
                 else:
                     ks_mlade += n['shares']
-                    dni_cakat = 365 - vek_dni
-                    dat_oslobodenia = (n['date'] + pd.Timedelta(days=365)).strftime('%d.%m.%Y')
