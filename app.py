@@ -30,7 +30,6 @@ if uploaded_files:
         ticker_surovy = str(riadok['Ticker'])
         full_name = str(riadok.get('Name', 'Neznáma spoločnosť')).strip()
         
-        # VYČISTENIE A ZJEDNOTENIE NÁZVOV TICKEROV (BRK_B -> BRK.B, AAPL_US -> AAPL)
         ticker = ticker_surovy.replace("US ", "").replace("_US", "").replace("_US_EQ", "").replace("_EQ", "").replace(".US", "").strip()
         ticker = ticker.replace("_", ".").replace(" ", ".").upper()
         
@@ -150,7 +149,6 @@ if uploaded_files:
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     st.write("Vyberte firmu zo zoznamu a zadajte aktuálny otvorený stav z platformy Trading 212.")
     
-    # Menu postavíme zo všetkých reálnych nákupov v CSV bez ohľadu na zostatky
     zoznam_vsetkych_tickerov = []
     for _, riadok in df.iterrows():
         typ_c = str(riadok['Action']).lower()
