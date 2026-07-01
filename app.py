@@ -141,7 +141,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - ÚPLNE PLOCHÁ MATEMATIKA BEZ ODSADENIA
+    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - ÚPLNE PLOCHÁ MATEMATIKA BEZ SPLIT/STRIP CHÝB
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -162,10 +162,11 @@ if uploaded_files:
         ponuka_pre_menu = [f"{t} - {databaza_mien.get(t, 'Spoločnosť')}" for t in zoznam_vsetkych_tickerov]
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         
-        # 🔓 LOGICKÁ OPRAVA: Pridaný index prvej položky, aby split nevytváral chybné pole pre .strip()
-        vybrany_ticker = vybrany_text.split(" - ")[0].strip()
+        # 🔓 LOGICKÁ OPRAVA NATVRDO: Vytiahneme prvé slovo z textu cez split bez rizikového reťazenia funkcií!
+        casti_textu = vybrany_text.split(" - ")
+        vybrany_ticker = str(casti_textu[0]).strip()
         
-        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne vlastníte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_bez_formulara_v6")
+        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne vlastníte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_bez_formulara_v7")
         
         df['Ticker_Clean'] = df['Ticker'].str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", ".").str.replace(" ", ".").str.upper()
         df_nakupy = df[(df['Ticker_Clean'] == vybrany_ticker) & (df['Action'].str.lower().str.contains('buy|investment|deposit'))].copy()
@@ -177,5 +178,3 @@ if uploaded_files:
         ks_mlade = 0.0
         
         list_dat_nakupu = []
-        list_mnozstiev = []
-        list_stavov = []
