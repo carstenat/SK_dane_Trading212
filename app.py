@@ -16,7 +16,6 @@ if dark_mode:
         .stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; }
         h1, h2, h3, label, p, span { color: #FFFFFF !important; }
         div[data-testid="stMetric"] { background-color: #1E293B !important; border: 2px solid #475569 !important; border-radius: 12px !important; padding: 14px 18px !important; }
-        .stDataFrame div { background-color: #111827 !important; color: #F8FAFC !important; }
         </style>
     """, unsafe_allow_html=True)
 else:
@@ -70,14 +69,14 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v600")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v700")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v600")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v700")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v600")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v700")
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
@@ -117,13 +116,8 @@ if uploaded_files:
                 vydavok_safe_balika = 0.0
                 vydavok_mladeho_balika = 0.0
                 
-                list_dat_nakupu = []
-                list_mnozstiev = []
-                list_stavov = []
-                list_povodna_cena = []
-                list_celkovy_nakup = []
-                list_dat_oslobodenia = []
-                list_cakania = []
+                # 🛡️ Plochý HTML textový buffer na zber riadkov tabuľky (0% šanca na chýbajúcu zátku)
+                html_riadky = ""
                 
                 for n in sklad_aktualny:
                     if potrebne_ks < 1e-5:
@@ -135,23 +129,21 @@ if uploaded_files:
                     vek_dni = (dnes.date() - nakup_pure.date()).days
                     cena_balika = vziat_ks * n['cena_za_kus']
                     
-                    list_dat_nakupu.append(nakup_pure.strftime('%d.%m.%Y'))
-                    list_mnozstiev.append(f"{vziat_ks:.5f}")
-                    list_povodna_cena.append(f"{n['cena_za_kus']:.2f} EUR")
-                    list_celkovy_nakup.append(f"{cena_balika:.2f} EUR")
+                    d_nakupu = nakup_pure.strftime('%d.%m.%Y')
+                    mnozstvo_str = f"{vziat_ks:.5f}"
+                    p_cena_str = f"{n['cena_za_kus']:.2f} EUR"
+                    celkovy_n_str = f"{cena_balika:.2f} EUR"
                     
                     if vek_dni >= 365:
                         ks_bez_dane += vziat_ks
                         vydavok_safe_balika += cena_balika
-                        list_stavov.append("🟢 BEZ DANE")
-                        list_dat_oslobodenia.append("Už oslobodené")
-                        list_cakania.append("0 dní")
+                        html_riadky += f"<tr><td>{d_nakupu}</td><td>{mnozstvom_str := mnozstvo_str}</td><td>{p_cena_str}</td><td>{celkovy_n_str}</td><td style='color:#22C55E;font-weight:bold;'>🟢 BEZ DANE</td><td>Už oslobodené</td><td>0 dní</td></tr>"
                     else:
                         ks_mlade += vziat_ks
                         vydavok_mladeho_balika += cena_balika
-                        list_stavov.append("🔴 ZDAŇUJE SA")
-                        list_dat_oslobodenia.append((nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y'))
-                        list_cakania.append(f"⏳ {365 - vek_dni} dní")
+                        d_oslobodenia = (nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y')
+                        cakanie_str = f"{365 - vek_dni} dní"
+                        html_riadky += f"<tr><td>{d_nakupu}</td><td>{mnozstvom_str := mnozstvo_str}</td><td>{p_cena_str}</td><td>{celkovy_n_str}</td><td style='color:#EF4444;font-weight:bold;'>🔴 ZDAŇUJE SA</td><td>{d_oslobodenia}</td><td>⏳ {cakanie_str}</td></tr>"
                 
                 ks_bez_dane = round(ks_bez_dane, 5)
                 ks_mlade = round(ks_mlade, 5)
@@ -159,12 +151,12 @@ if uploaded_files:
                 st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
                 st.progress(float(ks_bez_dane / skutocny_stav))
                 
-                # 🔓 1. ZELENÁ KARTA (Safe pozície)
+                # 🔓 1. ZELENÁ KARTA
                 trhova_hodnota_safe = ks_bez_dane * aktualna_cena
                 cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
                 st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
                 
-                # 🔓 2. ORANŽOVO-ŽLTÁ VÝSTRAHA (Čistá plochá matematika bez rizika zacyklenia)
+                # 🔓 2. ORANŽOVO-ŽLTÁ VÝSTRAHA
                 trhova_hodnota_mlade = ks_mlade * aktualna_cena
                 zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
                 dan_19 = round(zisk_mlade * 0.19, 2)
@@ -174,13 +166,12 @@ if uploaded_files:
                 st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
                 st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: {zisk_mlade:.2f} EUR | Daň z príjmu (19%): {dan_19:.2f} EUR | Zdravotné odvody (14%): {odvody_14:.2f} EUR | Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR")
                 
-                # 🔓 3. ROZKLIKÁVACIE OKNO S TABUĽKOU (GARANTOVANE ZAVRETÉ A FUNKČNÉ)
+                # 🔓 3. ROZKLIKÁVACIE OKNO S ČISTOU HTML TABUĽKOU (0% RIZIKO SYNTAX ERROR)
                 with st.expander("📋 Zobraziť detailný rozpis nákupných balíčkov (Frakcií)"):
-                    tovarna_tabulky = pd.DataFrame({
-                        "Dátum nákupu": list_dat_nakupu,
-                        "Množstvo (ks)": list_mnozstiev,
-                        "Nákupná cena/ks": list_povodna_cena,
-                        "Celkový nákup": list_celkovy_nakup,
-                        "Daňový stav": list_stavov,
-                        "Dátum oslobodenia": list_dat_oslobodenia,
-                        "Zostáva čakať": list_cakania
+                    st.markdown(f"""
+                        <table style='width:100%; border-collapse: collapse; text-align: left;'>
+                            <thead>
+                                <tr style='border-bottom: 2px solid #CBD5E1;'>
+                                    <th>Dátum nákupu</th><th>Množstvo (ks)</th><th>Nákupná cena/ks</th><th>Celkový nákup</th><th>Daňový stav</th><th>Dátum oslobodenia</th><th>Zostáva čakať</th>
+                                </tr>
+                            </thead>
