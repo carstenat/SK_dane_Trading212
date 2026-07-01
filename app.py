@@ -41,7 +41,7 @@ else:
     """, unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny nástroj na kontrolu časového testu pred predajom and automatickú ročnú daňovú uzávierku.")
+st.write("Profesionálny nástroj na kontrolu časového testu pred predajom a automatickú ročnú daňovú uzávierku.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
 
@@ -54,13 +54,11 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    # Numerické poistenie všetkých finančných hodnôt
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
     df['Result'] = pd.to_numeric(df['Result'], errors='coerce').fillna(0.0)
     df['Withholding tax'] = pd.to_numeric(df['Withholding tax'], errors='coerce').fillna(0.0)
     
-    # Surové párovanie tickerov bez akéhokoľvek orezávania prípon
     df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
     
     databaza_mien = {}
@@ -90,14 +88,14 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v130")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v135")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            skutocny_stav = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v130")
+            vstup_vlastnené = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v135")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v130")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v135")
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
@@ -120,55 +118,53 @@ if uploaded_files:
                         predat_este -= vziat
                 sklad_aktualny = [x for x in sklad_aktualny if x['shares'] > 1e-6]
         
-        if skutocny_stav > 0:
-            potrebne_ks = skutocny_stav
-            dnes = datetime.now()
-            ks_bez_dane = 0.0
-            ks_mlade = 0.0
-            vydavok_safe_balika = 0.0
-            vydavok_mladeho_balika = 0.0
+        # Spočítame reálny maximálny stav skladu, ktorý zostal k dispozícii
+        max_sklad_dostupny = sum([x['shares'] for x in sklad_aktualny])
+        
+        if vstup_vlastnené > 0:
+            # 🛡️ POISTKA: Kód automaticky oreže výpočet na maximálne dostupné množstvo, aby nespadla tabuľka
+            skutocny_stav = min(vstup_vlastnené, max_sklad_dostupny)
             
-            list_dat_nakupu = []
-            list_mnozstiev = []
-            list_stavov = []
-            list_povodna_cena = []
-            list_celkovy_nakup = []
-            list_dat_oslobodenia = []
-            list_cakania = []
-            
-            for n in sklad_aktualny:
-                if potrebne_ks < 1e-5:
-                    break
-                vziat_ks = min(n['shares'], potrebne_ks)
-                potrebne_ks -= vziat_ks
+            if skutocny_stav <= 0:
+                st.warning(f"Upozornenie: Pre {vybrany_ticker_pure} nemáte podľa nahranej histórie otvorenú žiadnu pozíciu (všetko bolo predtým predané).")
+            else:
+                potrebne_ks = skutocny_stav
+                dnes = datetime.now()
+                ks_bez_dane = 0.0
+                ks_mlade = 0.0
+                vydavok_safe_balika = 0.0
+                vydavok_mladeho_balika = 0.0
                 
-                nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
-                vek_dni = (dnes.date() - nakup_pure.date()).days
-                cena_balika = vziat_ks * n['cena_za_kus']
+                list_dat_nakupu = []
+                list_mnozstiev = []
+                list_stavov = []
+                list_povodna_cena = []
+                list_celkovy_nakup = []
+                list_dat_oslobodenia = []
+                list_cakania = []
                 
-                list_dat_nakupu.append(nakup_pure.strftime('%d.%m.%Y'))
-                list_mnozstiev.append(f"{vziat_ks:.5f}")
-                list_povodna_cena.append(f"{n['cena_za_kus']:.2f} EUR")
-                list_celkovy_nakup.append(f"{cena_balika:.2f} EUR")
-                
-                if vek_dni >= 365:
-                    ks_bez_dane += vziat_ks
-                    vydavok_safe_balika += cena_balika
-                    list_stavov.append("🟢 Bez dane (Nad 1 rok)")
-                    list_dat_oslobodenia.append("Už oslobodené")
-                    list_cakania.append("0 dní")
-                else:
-                    ks_mlade += vziat_ks
-                    vydavok_mladeho_balika += cena_balika
-                    list_stavov.append("🔴 Zdaňuje sa (Mladá akcia)")
-                    list_dat_oslobodenia.append((nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y'))
-                    list_cakania.append(f"⏳ {365 - vek_dni} dní")
-            
-            st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
-            st.progress(float(ks_bez_dane / skutocny_stav))
-            
-            c1, c2 = st.columns(2)
-            
-            if aktualna_cena > 0:
-                trhova_hodnota_safe = ks_bez_dane * aktualna_cena
-                cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
+                for n in sklad_aktualny:
+                    if potrebne_ks < 1e-5:
+                        break
+                    vziat_ks = min(n['shares'], potrebné_ks_pure := potrebne_ks)
+                    potrebne_ks -= vziat_ks
+                    
+                    nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
+                    vek_dni = (dnes.date() - nakup_pure.date()).days
+                    cena_balika = vziat_ks * n['cena_za_kus']
+                    
+                    list_dat_nakupu.append(nakup_pure.strftime('%d.%m.%Y'))
+                    list_mnozstiev.append(f"{vziat_ks:.5f}")
+                    list_povodna_cena.append(f"{n['cena_za_kus']:.2f} EUR")
+                    list_celkovy_nakup.append(f"{cena_balika:.2f} EUR")
+                    
+                    if vek_dni >= 365:
+                        ks_bez_dane += vziat_ks
+                        vydavok_safe_balika += cena_balika
+                        list_stavov.append("🟢 Bez dane (Nad 1 rok)")
+                        list_dat_oslobodenia.append("Už oslobodené")
+                        list_cakania.append("0 dní")
+                    else:
+                        ks_mlade += vziat_ks
+                        vydavok_mladeho_balika += cena_balika
+                        list_stavov.append("🔴 Zdaňuje sa (Mladá akcia)")
