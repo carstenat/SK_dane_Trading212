@@ -39,7 +39,7 @@ if uploaded_files:
         
     df = pd.concat(zoznam_df, ignore_index=True)
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
-    df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
+    df = df.dropna(subset=['Time', 'Ticker']).sort_values(by='Time').reset_index(drop=True)
     
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
@@ -56,7 +56,8 @@ if uploaded_files:
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     
-    df_akcie = df[df['Action'].str.lower().str.contains('buy|investment|deposit|sell|divestment|withdrawal|rebalancing', na=False)].copy()
+    # 🛡️ STRIKTNÝ AKCIOVÝ FILTER (Bez hotovostných vkladov a poplatkov)
+    df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|market buy|market sell|limit buy|market sell', na=False)].copy()
     zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
     
     if zoznam_tickerov_all:
@@ -69,14 +70,14 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v850")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v900")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v850")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v900")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v850")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v900")
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
@@ -87,10 +88,10 @@ if uploaded_files:
             total = float(riadok['Total'])
             datum = riadok['Time']
             
-            if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
+            if 'buy' in typ:
                 if shares > 0.00001:
                     sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
-            elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
+            elif 'sell' in typ or shares < 0:
                 predat_este = abs(shares)
                 for b in sklad_aktualny:
                     if predat_este > 1e-6 and b['shares'] > 0:
@@ -170,6 +171,7 @@ if uploaded_files:
                 st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
                 st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: {zisk_mlade:.2f} EUR | Daň z príjmu (19%): {dan_19:.2f} EUR | Zdravotné odvody (14%): {odvody_14:.2f} EUR | Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR")
                 
-                # 🛡️ 100% GARANTOVANÝ EXPANDER BEZ VNÚTORNÝCH CHÝB STRÁNKY
+                # 🔓 ROZKLIKÁVACIE OKNO (PLNE OPRAVENÉ)
                 with st.expander("📋 Zobraziť detailný rozpis nákupných balíčkov (Frakcií)"):
                     st.write("Tu nájdete kompletný chronologický zoznam vašich nákupov, z ktorých je poskladaná dnešná otvorená pozícia:")
+                    for riadok_vypisu in rozpis_textov:
