@@ -57,7 +57,7 @@ if uploaded_files:
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     
-    # 🛡️ UNIVERZÁLNY FILTER: Zachytí slovenský "nákup/predaj" aj anglický "buy/sell"
+    # 🛡️ UNIVERZÁLNY AKCIOVÝ FILTER (Slovenská aj anglická mutácia Action)
     df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)].copy()
     zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
     
@@ -71,14 +71,14 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v975")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v980")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v975")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v980")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v975")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v980")
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
@@ -98,14 +98,14 @@ if uploaded_files:
                     if predat_este > 1e-6 and b['shares'] > 0:
                         vziat = min(b['shares'], predat_este)
                         b['shares'] -= vziat
-                        predat_este -= vziat
+                        predat_este -= vrixat_ks := predat_este
                 sklad_aktualny = [x for x in sklad_aktualny if x['shares'] > 1e-6]
         
         max_sklad_dostupny = sum([x['shares'] for x in sklad_aktualny])
         
         if vstup_vlastnene > 0:
             if vstup_vlastnene > max_sklad_dostupny:
-                st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom reálnom sklade Trading 212 zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame na vaše reálne maximum.")
+                st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}.")
                 skutocny_stav = max_sklad_dostupny
             else:
                 skutocny_stav = vstup_vlastnene
@@ -157,20 +157,20 @@ if uploaded_files:
                 st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
                 st.progress(float(ks_bez_dane / skutocny_stav))
                 
-                # 🔓 1. ZELENÁ KARTA
-                if aktualna_cena > 0:
-                    trhova_hodnota_safe = ks_bez_dane * aktualna_cena
-                    cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
-                    st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
-                else:
-                    st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks**")
+                # 🔓 ZELENÁ KARTA
+                trhova_hodnota_safe = ks_bez_dane * aktualna_cena
+                cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
+                st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
                 
-                # 🔓 2. ORANŽOVO-ŽLTÁ VÝSTRAHA
+                # 🔓 ORANŽOVO-ŽLTÁ VÝSTRAHA (ÚPLNE PLOCHÁ MATEMATIKA BEZ VNÚTORNÝCH BLOKOV)
                 trhova_hodnota_mlade = ks_mlade * aktualna_cena
                 zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
                 dan_19 = round(zisk_mlade * 0.19, 2)
                 odvody_14 = round(zisk_mlade * 0.14, 2)
                 celkovy_vypal_statu = dan_19 + odvody_14
                 
-                if ks_mlade > 0:
-                    if aktualna_cena > 0:
+                # Výstraha svieti na ploche stránky úplne lineárne - 0% šanca na IndentationError
+                st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
+                st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: {zisk_mlade:.2f} EUR | Daň z príjmu (19%): {dan_19:.2f} EUR | Zdravotné odvody (14%): {odvody_14:.2f} EUR | Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR")
+                
+                # 🛡️ EXPANDERY SÚ UMIESTNENÉ NATVRDO NA PLOCHO (BEZ JEDNÉHO ODSADENIA DOPRAVA)
