@@ -137,18 +137,25 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR - UPRAVENÝ LIMIT NA 0.10 KS PRE PRACH
+    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR - S FUNKCIOU ČIERNEJ LISTINY (BLACKLIST)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
-    st.write(f"Aplikácia analyzovala váš skutočný aktuálny otvorený sklad k dnešnému dňu ({datetime.now().strftime('%d.%m.%Y')}).")
+    
+    # MANUÁLNY FILTER PRE PÁNA APPLIKÁCIE
+    blacklist_vstup = st.text_input("🛡️ Čierna listina tickerov (Zadajte skratky oddelené čiarkou firiem, ktoré chcete NATVRDO SKRYŤ, napr. AVGO, RACE, ORCL):", value="")
+    čierna_listina = [t.strip().upper() for t in blacklist_vstup.split(",") if t.strip()]
     
     skryt_stare = st.checkbox("⚙️ Skryť akcie, ktoré som už kompletne predal (Zobraziť len aktuálne portfólio)", value=True)
     
     aktivne_tickery = []
     for t in sklad.keys():
+        # Ak je ticker na čiernej listine, úplne ho preskočíme
+        if t.upper() in čierna_listina:
+            continue
+            
         celkovo_ks = sum(n['shares'] for n in sklad[t])
-        if skryt_stare and celkovo_ks >= 0.10: # DÔSLEDNÝ LIMIT NA VYMAZANIE DROBNÝCH ZOSTATKOV
+        if skryt_stare and celkovo_ks >= 0.01:
             aktivne_tickery.append(t)
         elif not skryt_stare and celkovo_ks > 0.0001:
             aktivne_tickery.append(t)
@@ -188,8 +195,3 @@ if uploaded_files:
                     podrobnosti_mlade.append({'shares': n['shares'], 'date': n['date'].strftime('%d.%m.%Y'), 'dni_cakat': dni_do_roka})
             
             c1, c2 = st.columns(2)
-            c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**")
-            c2.warning(f"🔒 MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes):\n**{ks_mlade:.5f} ks**")
-            
-            if ks_mlade > 0:
-                st.markdown("### 📅 Kedy predáte zvyšok bez dane?")
