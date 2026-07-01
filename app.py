@@ -50,6 +50,7 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
+    # Prísne ošetrenie numerických stĺpcov
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
     
@@ -79,14 +80,14 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v145")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v150")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v145")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v150")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v145")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v150")
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
@@ -98,6 +99,7 @@ if uploaded_files:
             datum = riadok['Time']
             
             if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
+                # 🛡️ NEPRIESTRELNÁ POISTKA: Ak sú nákupné kusy nula, riadok úplne preskočíme a kód nikdy nezhasne na delení nulou
                 if shares > 0.00001:
                     sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
             elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
@@ -115,7 +117,7 @@ if uploaded_files:
             skutocny_stav = min(vstup_vlastnene, max_sklad_dostupny)
             
             if skutocny_stav <= 0:
-                st.warning(f"Upozornenie: Pre {vybrany_ticker_pure} nemáte otvorenu žiadnu pozíciu.")
+                st.warning(f"Upozornenie: Pre {vybrany_ticker_pure} nemáte podľa nahranej histórie otvorenú žiadnu pozíciu.")
             else:
                 potrebne_ks = skutocny_stav
                 dnes = datetime.now()
@@ -163,7 +165,7 @@ if uploaded_files:
                 st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
                 st.progress(float(ks_bez_dane / skutocny_stav))
                 
-                # 🛡️ STABILNÉ KARTY BEZ VNÚTORNÝCH BLOKOV (UKÁŽU VŠETKO NARAZ NA 100%)
+                # 🛡️ STABILNÉ UKAZOVATELE: Vykreslia sa naraz bez akýchkoľvek podmienok prerušenia
                 col_c1, col_c2 = st.columns(2)
                 
                 if aktualna_cena > 0:
@@ -173,4 +175,3 @@ if uploaded_files:
                     
                     trhova_hodnota_mlade = ks_mlade * aktualna_cena
                     zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
-                    celkova_hrozba = round((zisk_mlade * 0.19) + (zisk_mlade * 0.14), 2)
