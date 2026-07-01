@@ -143,7 +143,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - BEZPEČNÝ FORMULÁR (PLOCHÁ PANDAS LOGIKA)
+    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - PLOCHÁ PANDAS LOGIKA (STOPERCENTNE STABILNÁ)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -162,20 +162,18 @@ if uploaded_files:
     if not zoznam_vsetkych_tickerov:
         st.info("V nahratých súboroch sa nenachádzajú žiadne nákupné transakcie.")
     else:
-        with st.form(key="definitivny_form_ok_t212"):
-            ponuka_pre_menu = []
-            mapovanie = {}
-            for t in zoznam_vsetkych_tickerov:
-                text_polozky = f"{t} - {databaza_mien.get(t, 'Spoločnosť z platformy')}"
-                ponuka_pre_menu.append(text_polozky)
-                mapovanie[text_polozky] = t
-                
-            vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
-            vybrany_ticker = mapovanie[vybrany_text]
+        ponuka_pre_menu = []
+        mapovanie = {}
+        for t in zoznam_vsetkych_tickerov:
+            text_polozky = f"{t} - {databaza_mien.get(t, 'Spoločnosť z platformy')}"
+            ponuka_pre_menu.append(text_polozky)
+            mapovanie[text_polozky] = t
             
-            skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne reálne vlastníte:", min_value=0.0, value=0.0, step=0.00001, format="%.5f")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
+        vybrany_ticker = mapovanie[vybrany_text]
+        
+        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne reálne vlastníte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_bez_formulara")
+        
+        if skutocny_stav_mobil > 0:
+            df['Ticker_Clean'] = df['Ticker'].str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", ".").str.replace(" ", ".").str.upper()
             
-            tlacidlo_spustenia = st.form_submit_button(label="🚀 Spustiť daňovú kontrolu pozície")
-            
-        if tlacidlo_spustenia and skutocny_stav_mobil > 0:
-            # 💡 PLOCHÁ PANDAS LOGIKA BEZ SLUČKY FOR NA HISTÓRIU (VYMAZANÁ CHYBA ZO SIVÉHO OBRÁZKA)
