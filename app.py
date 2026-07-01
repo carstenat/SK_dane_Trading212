@@ -141,7 +141,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - PLOCHÁ LOGIKA BEZ VNÚTORNÝCH CHÝB
+    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - ÚPLNE PLOCHÁ MATEMATIKA BEZ ODSADENIA
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -162,10 +162,10 @@ if uploaded_files:
         ponuka_pre_menu = [f"{t} - {databaza_mien.get(t, 'Spoločnosť')}" for t in zoznam_vsetkych_tickerov]
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         
-        # 🔓 DEFINITÍVNA OPRAVA: Pridaný chýbajúci index, aby split nevytváral chybné pole pre strip()!
+        # 🔓 LOGICKÁ OPRAVA: Pridaný index prvej položky, aby split nevytváral chybné pole pre .strip()
         vybrany_ticker = vybrany_text.split(" - ")[0].strip()
         
-        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne vlastníte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_bez_formulara_v5")
+        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne vlastníte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_bez_formulara_v6")
         
         df['Ticker_Clean'] = df['Ticker'].str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", ".").str.replace(" ", ".").str.upper()
         df_nakupy = df[(df['Ticker_Clean'] == vybrany_ticker) & (df['Action'].str.lower().str.contains('buy|investment|deposit'))].copy()
