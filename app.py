@@ -6,7 +6,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 Daňová Kalkulačka", page_icon="📈", layout="wide")
 
 st.title("📈 Súkromný Daňový Asistent a Optimalizátor pre Trading 212 (SR)")
-st.write("Nahrajte svoje CSV exporty z Trading 212 a získajte ročný daňový manuál + checker pre safe predaj akcií.")
+st.write("Nahrajte svoje CSV exporty z Trading 212 a získajte ročný daňový manuál + checker pre bezpečný predaj akcií.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV súbory (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
 
@@ -68,7 +68,7 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0:
-                    if not sklad[ticker]: # OPRAVENÉ: Ak je sklad prázdny, okamžite vyskoč z histórie a nezasekávaj web!
+                    if not sklad[ticker]:
                         break
                         
                     najstarsie = sklad[ticker][0]
@@ -169,7 +169,7 @@ if uploaded_files:
             for n in nákupy_vsetky:
                 if potrebne_ks <= 0:
                     break
-                vziat_ks = min(n['shares'], _ks := potrebne_ks)
+                vziat_ks = min(n['shares'], potrebne_ks)
                 nákupy_skutocne.append({'shares': vziat_ks, 'date': n['date']})
                 potrebne_ks -= vziat_ks
             
@@ -193,3 +193,4 @@ if uploaded_files:
                     })
                 else:
                     ks_mlade += n['shares']
+                    dni_cakat = 365 - vek_dni
