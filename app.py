@@ -50,7 +50,6 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    # Prísne ošetrenie numerických stĺpcov
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
     
@@ -99,7 +98,6 @@ if uploaded_files:
             datum = riadok['Time']
             
             if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
-                # 🛡️ NEPRIESTRELNÁ POISTKA: Ak sú nákupné kusy nula, riadok úplne preskočíme a kód nikdy nezhasne na delení nulou
                 if shares > 0.00001:
                     sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
             elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
@@ -114,10 +112,15 @@ if uploaded_files:
         max_sklad_dostupny = sum([x['shares'] for x in sklad_aktualny])
         
         if vstup_vlastnene > 0:
-            skutocny_stav = min(vstup_vlastnene, max_sklad_dostupny)
-            
+            # 🛡️ DEFINITÍVNE OŠETRENIE LIMITU: Ak zadáš viac ako vlastníš, kód ťa bezpečne zastaví a prepočíta maximum
+            if vstup_vlastnene > max_sklad_dostupny:
+                st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom reálnom sklade Trading 212 zostáva len {max_sklad_dostupny:.5f} ks ASML. Výpočet orezávame na vaše reálne maximum.")
+                skutocny_stav = max_sklad_dostupny
+            else:
+                skutocny_stav = vstup_vlastnene
+                
             if skutocny_stav <= 0:
-                st.warning(f"Upozornenie: Pre {vybrany_ticker_pure} nemáte podľa nahranej histórie otvorenú žiadnu pozíciu.")
+                st.warning(f"Upozornenie: Pre {vybrany_ticker_pure} nemáte otvorenú žiadnu pozíciu.")
             else:
                 potrebne_ks = skutocny_stav
                 dnes = datetime.now()
@@ -165,7 +168,6 @@ if uploaded_files:
                 st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
                 st.progress(float(ks_bez_dane / skutocny_stav))
                 
-                # 🛡️ STABILNÉ UKAZOVATELE: Vykreslia sa naraz bez akýchkoľvek podmienok prerušenia
                 col_c1, col_c2 = st.columns(2)
                 
                 if aktualna_cena > 0:
@@ -173,5 +175,3 @@ if uploaded_files:
                     cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
                     col_c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**\nHodnota: {trhova_hodnota_safe:.2f} € (Čistý zisk: +{cisty_zisk_safe:.2f} €)")
                     
-                    trhova_hodnota_mlade = ks_mlade * aktualna_cena
-                    zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
