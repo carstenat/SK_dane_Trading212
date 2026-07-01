@@ -142,7 +142,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: DNEŠNÝ OPTIMALIZÁTOR - MATEMATICKY A ZAROVNANÍM 100% OVERENÝ
+    # 🔥 2. KROK: DNEŠNÝ OPTIMALIZÁTOR - 100% S PLOCHÝM ZAROVNANÍM
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -161,22 +161,20 @@ if uploaded_files:
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         vybrany_ticker = mapovanie[vybrany_text]
         
-        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne SKUTOČNE vidíte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_t212_vFINAL_OK")
+        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne SKUTOČNE vidíte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_t212_vFINAL_DVE")
         
         if skutocny_stav_mobil > 0:
             nákupy_vsetky = sklad.get(vybrany_ticker, [])
             
             if not nákupy_vsetky:
                 st.info("V histórii nákupov pre tento ticker neboli nájdené žiadne otvorené balíčky.")
-            
-            # TÁTO ČASŤ JE TERAZ DOKONALE ZAROVNANÁ BEZ VNÚTORNÝCH BLOKOV (ZABRÁNI INDENTATION ERROR)
-            if nákupy_vsetky:
+            else:
                 nákupy_vsetky = sorted(nákupy_vsetky, key=lambda x: x['date'])
                 nákupy_skutocne = []
                 potrebne_ks = skutocny_stav_mobil
                 
                 for n in nákupy_vsetky:
-                    if potrebne_ks <= 0:
+                    if potrebné_break := (potrebne_ks <= 0):
                         break
                     vziat_ks = min(n['shares'], potrebne_ks)
                     nákupy_skutocne.append({'shares': vziat_ks, 'date': n['date']})
@@ -191,4 +189,5 @@ if uploaded_files:
                 list_dat_oslobodenia = []
                 list_cakania = []
                 
+                # 💡 UKUKŠENÝ, PLOCHÝ CYKLUS BEZ VNÚTORNÝCH BLOKOV (OPRAVENÁ CHYBA ZO SIVÉHO OBRÁZKA)
                 for n in nákupy_skutocne:
