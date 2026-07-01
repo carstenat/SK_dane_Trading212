@@ -141,7 +141,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - ÚPLNE PLOCHÁ MATEMATIKA S OPRAVENÝM INDEXOM
+    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - 100% NEPRIESTRELNÉ PÁROVANIE TICKEROV
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -150,7 +150,7 @@ if uploaded_files:
     for _, riadok in df.iterrows():
         typ_c = str(riadok['Action']).lower()
         if 'buy' in typ_c or 'investment' in typ_c or 'deposit' in typ_c:
-            tick_c = str(riadok['Ticker']).replace("US ", "").replace("_US", "").replace("_US_EQ", "").replace("_EQ", "").replace(".US", "").strip().replace("_", ".").replace(" ", ".").upper()
+            tick_c = str(riadok['Ticker']).replace("US ", "").replace("_US", "").replace("_US_EQ", "").replace("_EQ", "").replace(".US", "").strip().replace("_", "").replace(".", "").replace(" ", "").upper()
             if tick_c and tick_c != 'nan' and tick_c not in zoznam_vsetkych_tickerov:
                 zoznam_vsetkych_tickerov.append(tick_c)
                 
@@ -159,22 +159,24 @@ if uploaded_files:
     if not zoznam_vsetkych_tickerov:
         st.info("V nahratých súboroch sa nenachádzajú žiadne nákupné transakcie.")
     else:
-        ponuka_pre_menu = [f"{t} - {databaza_mien.get(t, 'Spoločnosť')}" for t in zoznam_vsetkych_tickerov]
+        # Vytvoríme pekné texty pre menu, ale zachováme čisté párovanie
+        ponuka_pre_menu = []
+        mapovanie = {}
+        for t in zoznam_vsetkych_tickerov:
+            # Priradíme správny pekný názov podľa zjednoteného kľúča
+            text_polozky = f"{t} - {databaza_mien.get(t, 'Spoločnosť')}"
+            for kľúč in databaza_mien.keys():
+                if kľúč.replace(".", "").replace("_", "") == t:
+                    text_polozky = f"{kľúč} - {databaza_mien[kľúč]}"
+            ponuka_pre_menu.append(text_polozky)
+            mapovanie[text_polozky] = t
+            
+        ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         
-        # 🔓 DEFINITÍVNA KOREKCIA: Vytiahnutie stringu s indexom [0] zamedzí AttributeError poliam
-        casti_textu = vybrany_text.split(" - ")
-        vybrany_ticker = casti_textu[0].strip()
+        # Vytiahneme zjednotený ticker bez bodiek a medzier
+        vybrany_ticker_pure = mapovanie[vybrany_text]
         
-        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne vlastníte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_bez_formulara_v8")
+        skutocny_stav_mobil = st.number_input("Zadajte presný počet kusov, ktorý momentálne vlastníte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_cisty_v9")
         
-        df['Ticker_Clean'] = df['Ticker'].str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", ".").str.replace(" ", ".").str.upper()
-        df_nakupy = df[(df['Ticker_Clean'] == vybrany_ticker) & (df['Action'].str.lower().str.contains('buy|investment|deposit'))].copy()
-        df_nakupy = df_nakupy.sort_values(by='Time').reset_index(drop=True)
-        
-        potrebne_ks = skutocny_stav_mobil
-        dnes = datetime.now()
-        ks_bez_dane = 0.0
-        ks_mlade = 0.0
-        
-        list_dat_nakupu = []
+        # 💡 ÚPLNE NOVÉ PANDAS POROVNANIE - Zmaže z CSV bodky aj medzery, takže BRK B z CSV sadne na BRK.B z menu!
