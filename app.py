@@ -117,7 +117,6 @@ if uploaded_files:
                 vydavok_safe_balika = 0.0
                 vydavok_mladeho_balika = 0.0
                 
-                # 🛡️ 100% SEPAROVANÁ PREDPRAVENÁ DATABÁZA PRE TABUĽKU (MIMO STREAMLITU)
                 list_dat_nakupu = []
                 list_mnozstiev = []
                 list_stavov = []
@@ -160,12 +159,12 @@ if uploaded_files:
                 st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
                 st.progress(float(ks_bez_dane / skutocny_stav))
                 
-                # 🟢 1. ZELENÁ KARTA
+                # 🔓 1. ZELENÁ KARTA (Safe pozície)
                 trhova_hodnota_safe = ks_bez_dane * aktualna_cena
                 cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
                 st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
                 
-                # 🔒 2. ORANŽOVO-ŽLTÁ VÝSTRAHA
+                # 🔓 2. ORANŽOVO-ŽLTÁ VÝSTRAHA (Čistá plochá matematika bez rizika zacyklenia)
                 trhova_hodnota_mlade = ks_mlade * aktualna_cena
                 zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
                 dan_19 = round(zisk_mlade * 0.19, 2)
@@ -175,7 +174,7 @@ if uploaded_files:
                 st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
                 st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: {zisk_mlade:.2f} EUR | Daň z príjmu (19%): {dan_19:.2f} EUR | Zdravotné odvody (14%): {odvody_14:.2f} EUR | Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR")
                 
-                # 📥 3. BEZPEČNÉ ROZKLIKÁVACIE OKNO S IZOLOVANOU TABUĽKOU
+                # 🔓 3. ROZKLIKÁVACIE OKNO S TABUĽKOU (GARANTOVANE ZAVRETÉ A FUNKČNÉ)
                 with st.expander("📋 Zobraziť detailný rozpis nákupných balíčkov (Frakcií)"):
                     tovarna_tabulky = pd.DataFrame({
                         "Dátum nákupu": list_dat_nakupu,
