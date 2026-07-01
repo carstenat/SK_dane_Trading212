@@ -5,7 +5,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 PRO Daňový Asistent & Optimalizátor", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 🎨 FUNKČNÝ PREPÍNAČ PRE DARK MODE (ČISTÉ CSS) - ŠTARTUJE V BIELOM REŽIME
+# 🎨 FUNKČNÝ PREPÍNAČ PRE DARK MODE (DEFAULT SVETLÝ)
 # =========================================================================
 st.sidebar.header("⚙️ Nastavenia vzhľadu")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
@@ -44,7 +44,7 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    # Bezpečné ošetrenie číselných stĺpcov proti pádom na typoch dát
+    # Absolútne zaistenie finančných stĺpcov na čisté čísla
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
     df['Result'] = pd.to_numeric(df['Result'], errors='coerce').fillna(0.0)
@@ -65,7 +65,6 @@ if uploaded_files:
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
-    st.write("Vyberte firmu zo zoznamu a zadajte aktuálny otvorený stav, ktorý vidíte v platforme Trading 212.")
     
     df_akcie = df[df['Action'].str.lower().str.contains('buy|investment|deposit|sell|divestment|withdrawal|rebalancing', na=False)].copy()
     zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
@@ -80,17 +79,16 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="selectbox_stabilna_v75")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="selectbox_stabilna_v80")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
-        # 🔓 PRIDANIE POLÍČOK VEDĽA SEBA PRE VYSOKÝ KOMPAKTNÝ KOMFORT
-        c_in1, c_input2 = st.columns(2)
-        with c_in1:
-            skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker_pure}, ktorý momentálne vidíte v platforme:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_stabilny_v75")
-        with c_input2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_pro_v75")
+        col1, col2 = st.columns(2)
+        with col1:
+            skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker_pure}, ktorý momentálne vidíte v platforme:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_stabilny_v80")
+        with col2:
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_pro_v80")
         
-        # Rekonštrukcia aktuálneho skladu pre vybranú akciu pomocou FIFO
+        # Rekonštrukcia aktuálneho skladu pomocou NEPRIESTRELNEJ lineárnej FIFO logiky
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
         sklad_aktualny = []
@@ -105,40 +103,40 @@ if uploaded_files:
                     sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
             elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
                 predat_este = abs(shares)
-                temp_sklad = []
-                for balicek in sklad_aktualny:
-                    if predat_este <= 1e-6:
-                        temp_sklad.append(balicek)
+                while predat_este > 1e-6 and len(sklad_aktualny) > 0:
+                    prvy_balicek = sklad_aktualny[0]
+                    if prvy_balicek['shares'] <= predat_este:
+                        predat_este -= prvy_balicek['shares']
+                        sklad_aktualny.pop(0)
                     else:
-                        if balicek['shares'] <= predat_este:
-                            predat_este -= balicek['shares']
-                        else:
-                            balicek['shares'] -= predat_este
-                            predat_este = 0.0
-                            temp_sklad.append(balicek)
-                sklad_aktualny = temp_sklad
+                        prvy_balicek['shares'] -= predat_este
+                        predat_este = 0.0
         
         if skutocny_stav > 0:
             potrebne_ks = skutocny_stav
             dnes = datetime.now()
             ks_bez_dane = 0.0
             ks_mlade = 0.0
-            nakupna_hodnota_safe = 0.0
-            nakupna_hodnota_mlade = 0.0
+            vydavok_safe_balika = 0.0
+            vydavok_mladeho_balika = 0.0
             
             list_dat_nakupu = []
             list_mnozstiev = []
             list_stavov = []
-            list_dat_oslobodenia = []
-            list_cakania = []
             list_povodna_cena = []
             list_celkovy_nakup = []
+            list_dat_oslobodenia = []
+            list_cakania = []
             
-            for n in sklad_aktualny:
-                if potrebne_ks < 1e-5:
-                    break
+            # Bezpečné lineárne odsekávanie pre optimalizátor - 0% ŠANCA NA ZACYKLENIE
+            temp_optimalizator_sklad = [dict(x) for x in sklad_aktualny]
+            while potrebné_ks_check := (potrebne_ks > 1e-5) and len(temp_sklad_check := temp_optimalizator_sklad) > 0:
+                n = temp_optimalizator_sklad[0]
                 vziat_ks = min(n['shares'], potrebne_ks)
                 potrebne_ks -= vziat_ks
+                n['shares'] -= vziat_ks
+                if n['shares'] <= 1e-6:
+                    temp_optimalizator_sklad.pop(0)
                 
                 nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
                 vek_dni = (dnes.date() - nakup_pure.date()).days
@@ -151,42 +149,37 @@ if uploaded_files:
                 
                 if vek_dni >= 365:
                     ks_bez_dane += vziat_ks
-                    nakupna_hodnota_safe += cena_balika
+                    vydavok_safe_balika += cena_balika
                     list_stavov.append("🟢 Bez dane (Nad 1 rok)")
                     list_dat_oslobodenia.append("Už oslobodené")
                     list_cakania.append("0 dní")
                 else:
                     ks_mlade += vziat_ks
-                    nakupna_hodnota_mlade += cena_balika
+                    vydavok_mladeho_balika += cena_balika
                     list_stavov.append("🔴 Zdaňuje sa (Mladá akcia)")
                     list_dat_oslobodenia.append((nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y'))
                     list_cakania.append(f"⏳ {365 - vek_dni} dní")
             
             c1, c2 = st.columns(2)
             
-            # 🔓 DYNAMICKÁ ZELENÁ KARTA S ODHADOM ČISTÉHO ZISKU V EUR
             if aktualna_cena > 0:
                 trhova_hodnota_safe = ks_bez_dane * aktualna_cena
-                cisty_zisk_safe = max(0.0, trhova_hodnota_safe - nakupna_hodnota_safe)
-                c1.metric(
-                    "Môžete predať IHNEĎ BEZ DANE", 
-                    f"{ks_bez_dane:.5f} ks", 
-                    f"Hodnota: {trhova_hodnota_safe:.2f} € (Čistý zisk: +{cisty_zisk_safe:.2f} €)"
-                )
+                cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
+                c1.metric("Môžete predať IHNEĎ BEZ DANE", f"{ks_bez_dane:.5f} ks", f"Hodnota: {trhova_hodnota_safe:.2f} € (Zisk: +{cisty_zisk_safe:.2f} €)")
+                
+                prijem_mlade = ks_mlade * aktualna_cena
+                zisk_mlade = max(0.0, prijem_mlade - vydavok_mladeho_balika)
+                celkova_hrozba = round((zisk_mlade * 0.19) + (zisk_mlade * 0.14), 2)
+                c2.metric("MLADÉ FRAKCIE (Zdaňujú sa dnes)", f"{ks_mlade:.5f} ks", f"Hrozba štátu: -{celkova_hrozba:.2f} EUR", delta_color="inverse")
             else:
                 c1.metric("Môžete predať IHNEĎ BEZ DANE", f"{ks_bez_dane:.5f} ks")
-                
-            # 🔓 DYNAMICKÁ ŽLTÁ KARTA S PREPOČTOM DAŇOVEJ HROZBY V EUR
-            if aktualna_cena > 0 and ks_mlade > 0:
-                trhova_hodnota_mlade = ks_mlade * aktualna_cena
-                zisk_mlade = max(0.0, trhova_hodnota_mlade - nakupna_hodnota_mlade)
-                dan_z_mladych = round(zisk_mlade * 0.19, 2)
-                odvody_z_mladych = round(zisk_mlade * 0.14, 2)
-                celkovy_vypal_statu = dan_z_mladych + odvody_z_mladych
-                c2.metric(
-                    "MLADÉ FRAKCIE (Zdaňujú sa dnes)", 
-                    f"{ks_mlade:.5f} ks", 
-                    f"Hrozba štátu: -{celkovy_vypal_statu:.2f} EUR", 
-                    delta_color="inverse"
-                )
-            else:
+                c2.metric("MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes)", f"{ks_mlade:.5f} ks")
+            
+            st.markdown("### 📋 Detailný rozpis balíčkov na vašom sklade:")
+            tovarna_tabulky = pd.DataFrame({
+                "Dátum nákupu": list_dat_nakupu,
+                "Množstvo (ks)": list_mnozstiev,
+                "Nákupná cena/ks": list_povodna_cena,
+                "Celkový nákup": list_celkovy_nakup,
+                "Daňový stav": list_stavov,
+                "Dátum oslobodenia": list_dat_oslobodenia,
