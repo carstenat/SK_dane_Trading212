@@ -16,7 +16,7 @@ if uploaded_files:
         zoznam_df.append(pd.read_csv(file))
         
     df = pd.concat(zoznam_df, ignore_index=True)
-    df['Time'] = pd.to_datetime(df['Time'])
+    df['Time'] = pd.to_datetime(df['Time']).dt.tz_localize(None) # Odstránime časové zóny pre presný výpočet dní
     df = df.sort_values(by='Time').reset_index(drop=True)
     
     sklad = {}
@@ -39,7 +39,7 @@ if uploaded_files:
         total = float(riadok['Total']) if pd.notna(riadok['Total']) else 0.0
         result = float(riadok['Result']) if pd.notna(riadok['Result']) else 0.0
         tax = float(riadok['Withholding tax']) if pd.notna(riadok['Withholding tax']) else 0.0
-        datum = pd.to_datetime(riadok['Time'])
+        datum = riadok['Time']
         rok = datum.year
         
         if rok not in vysledky_po_rokoch:
@@ -66,8 +66,8 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker]
-                    vek = datum - pd.to_datetime(najstarsie['date'])
+                    najstarsie = sklad[ticker][0]
+                    vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
                     if najstarsie['shares'] <= predat_este:
@@ -122,7 +122,7 @@ if uploaded_files:
             if v['zisk_do_roka'] <= 0:
                 st.info(f"Utrpeli ste stratu ({v['zisk_do_roka']:.2f} EUR). Netreba nič vypĺňať.")
             else:
-                if priznany_zisk_po_oslobodeni == 0:
+                if Docs := priznany_zisk_po_oslobodeni == 0:
                     st.info(f"Zisk {v['zisk_do_roka']:.2f} EUR nepresiahol 500 EUR. Je oslobodený.")
                 else:
                     pomer = priznany_zisk_po_oslobodeni / v['zisk_do_roka']
@@ -131,18 +131,17 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 ULTIMÁTNY OPTIMALIZÁTOR - BEZ FINANČNÉHO PRACHU (< 1 EUR)
+    # 🔥 ULTIMÁTNY OPTIMALIZÁTOR - BEZ PRACHU (ČISTÝ)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     st.write("Aplikácia analyzovala váš skutočný aktuálny otvorený sklad k dnešnému dňu.")
     
-    # FILTROVANIE PRACHU: Ticker prejde, len ak je celková hodnota zostávajúcich nákupov aspoň 1.00 EUR
     aktivne_tickery = []
     for t in sklad.keys():
         if len(sklad[t]) > 0:
-            odhadovana_hodnota_skladu = sum(n['shares'] * n['cena_za_kus'] for n in sklad[t])
-            if odhadovana_hodnota_skladu >= 1.0: # Ak držíš akcie aspoň za jedno euro
+            odhad_hodnoty = sum(n['shares'] * n['cena_za_kus'] for n in sklad[t])
+            if odhad_hodnoty >= 1.0: 
                 aktivne_tickery.append(t)
                 
     aktivne_tickery = sorted(aktivne_tickery)
@@ -157,7 +156,7 @@ if uploaded_files:
             ponuka_pre_menu.append(text_polozky)
             mapovanie[text_polozky] = t
             
-        vybrany_text = st.selectbox("Vyberte alebo napíšte názov firmy alebo skratku (Ticker):", ponuka_pre_menu)
+        vybrany_text = st.selectbox("Vyberte alebo napíšte názov firma alebo skratku (Ticker):", ponuka_pre_menu)
         
         if vybrany_text:
             vybrany_ticker = mapovanie[vybrany_text]
@@ -173,7 +172,7 @@ if uploaded_files:
             podrobnosti_mlade = []
             
             for n in nákupy:
-                vek_dni = (dnes - pd.to_datetime(n['date'])).days
+                vek_dni = (dnes - n['date'].to_pydatetime()).days
                 if vek_dni >= 365:
                     ks_bez_dane += n['shares']
                 else:
@@ -181,7 +180,7 @@ if uploaded_files:
                     dni_do_roka = 365 - vek_dni
                     podrobnosti_mlade.append({
                         'shares': n['shares'],
-                        'date': pd.to_datetime(n['date']).strftime('%d.%m.%Y'),
+                        'date': n['date'].strftime('%d.%m.%Y'),
                         'dni_cakat': dni_do_roka
                     })
             
