@@ -28,7 +28,7 @@ else:
     """, unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny Nástor na kontrolu časového testu pred predajom akcií.")
+st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
 
@@ -44,11 +44,13 @@ if uploaded_files:
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
     df['Withholding tax'] = pd.to_numeric(df['Withholding tax'], errors='coerce').fillna(0.0)
+    
+    # Vyčistenie a normalizácia surového tickeru z platformy
     df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
     
     databaza_mien = {}
     for _, riadok in df.iterrows():
-        tick_c = str(riadok['Ticker_Clean'])
+        tick_c = str(riadok['Ticker_Clean']).split('_')[0].split('.')[0]  # Orežeme Burzové prípony pre menu
         full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
         if tick_c and tick_c != 'nan' and full_name and full_name != 'nan':
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
@@ -57,9 +59,11 @@ if uploaded_files:
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     
-    # 🛡️ UNIVERZÁLNY AKCIOVÝ FILTER (Slovenská aj anglická mutácia Action)
     df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)].copy()
-    zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
+    
+    # Zostavíme ponuku čistých tickerov bez burzových prípon typu _EE alebo .DE
+    df_akcie['Ticker_Pure_Group'] = df_akcie['Ticker_Clean'].apply(lambda x: x.split('_')[0].split('.')[0])
+    zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Pure_Group'].unique() if x and x != 'nan' and x != ''])
     
     if zoznam_tickerov_all:
         ponuka_pre_menu = []
@@ -80,7 +84,8 @@ if uploaded_files:
         with col2:
             aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v985")
         
-        df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
+        # 🛡️ UNIVERZÁLNY PÁROVACÍ ENGINE: Schmatne ASML, ASML_EE aj ASML.DE naraz bez kolapsu
+        df_ticker = df_akcie[df_akcie['Ticker_Pure_Group'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
         sklad_aktualny = []
         for _, riadok in df_ticker.iterrows():
@@ -170,7 +175,3 @@ if uploaded_files:
                 celkovy_vypal_statu = dan_19 + odvody_14
                 
                 st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
-                st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: {zisk_mlade:.2f} EUR | Daň z príjmu (19%): {dan_19:.2f} EUR | Zdravotné odvody (14%): {odvody_14:.2f} EUR | Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR")
-                
-                # 🛡️ EXPANDERY SÚ UMIESTNENÉ NATVRDO NA PLOCHO
-                expander_frakcii = st.expander("📋 Zobraziť detailný rozpis nákupných balíčkov (Frakcií)")
