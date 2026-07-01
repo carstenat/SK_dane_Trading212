@@ -6,7 +6,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 PRO Daňový Asistent & Optimalizátor", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 🎨 HIGH-KONTRASTNÝ DESIGN (DEFAULT SVETLÝ, PREPÍNATEĽNÝ DO FINTECH DARK)
+# 🎨 DYNAMICKÝ FINTECH DESIGN (DEFAULT SVETLÝ S VYSOKÝM KONTRASTOM FARIEB)
 # =========================================================================
 st.sidebar.header("⚙️ Vzhľad a Vychytávky")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
@@ -33,7 +33,13 @@ else:
         .stApp { background-color: #FFFFFF !important; color: #1E293B !important; font-size: 14px !important; }
         h1 { font-size: 24px !important; font-weight: 700 !important; color: #0F172A !important; }
         h2 { font-size: 19px !important; font-weight: 600 !important; color: #1E293B !important; margin-top: 15px !important; }
-        div[data-testid="stMetric"] { background-color: #F8FAFC !important; border: 2px solid #CBD5E1 !important; border-radius: 12px !important; padding: 14px 18px !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important; }
+        div[data-testid="stMetric"] {
+            background-color: #F8FAFC !important;
+            border: 2px solid #CBD5E1 !important;
+            border-radius: 12px !important;
+            padding: 14px 18px !important;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+        }
         div[data-testid="stMetricValue"] { color: #0284C7 !important; font-size: 22px !important; font-weight: 800 !important; }
         div[data-testid="stMetricLabel"] { color: #475569 !important; font-size: 13px !important; font-weight: 600 !important; }
         .stTabs [data-baseweb="tab-list"] { background-color: #F1F5F9 !important; border: 1px solid #CBD5E1 !important; border-radius: 10px; padding: 4px; }
@@ -42,7 +48,7 @@ else:
     """, unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny nástroj na kontrolu časového testu pred predajom a automatickú ročnú daňovú uzávierku.")
+st.write("Profesionálny Nástroj na kontrolu časového testu pred predajom a automatickú ročnú daňovú uzávierku.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
 
@@ -55,7 +61,7 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    # 🛡️ GARANTOVANÉ ZAISTENIE ČÍSELNÝCH TYPOV (Už nikdy nespadne na TypeError)
+    # 🛡️ Garantované zaistenie dátových typov proti chybám textov v CSV
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
     df['Result'] = pd.to_numeric(df['Result'], errors='coerce').fillna(0.0)
@@ -83,7 +89,9 @@ if uploaded_files:
     df_akcie = df_filtrat[df_filtrat['Action'].str.lower().str.contains('buy|investment|deposit|sell|divestment|withdrawal|rebalancing', na=False)].copy()
     zoznam_tickerov_all = sorted(list(df_akcie['Ticker_Clean'].unique()))
     
-    if zoznam_tickerov_all:
+    if not zoznam_tickerov_all:
+        st.info("V nahratých súboroch sa nenachádzajú žiadne nákupné transakcie akcií.")
+    else:
         ponuka_pre_menu = []
         mapovanie_tickerov = {}
         for t in zoznam_tickerov_all:
@@ -93,14 +101,14 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia:", ponuka_pre_menu, key="widget_vyber_pro_v50")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia:", ponuka_pre_menu, key="widget_vyber_final_v51")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col_input1, col_input2 = st.columns(2)
         with col_input1:
-            skutocny_stav = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_pro_v50")
+            skutocny_stav = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_pro_final_v51")
         with col_input2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie (EUR):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_pro_v50")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie (EUR):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_final_v51")
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].copy()
         df_ticker = df_ticker.sort_values(by='Time').reset_index(drop=True)
@@ -113,7 +121,8 @@ if uploaded_files:
             datum = riadok['Time']
             
             if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
-                if shares > 0:
+                # 🛡️ ABSOLÚTNA KOREKCIA: Ak je shares nula (split), riadok bezpečne ignorujeme a kód nepadne!
+                if shares > 0.00001:
                     sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
             elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
                 predat_este = abs(shares)
@@ -165,9 +174,3 @@ if uploaded_files:
                     ks_bez_dane += vziat_ks
                     vydavok_safe_balika += cena_balika
                     list_stavov.append("🟢 Bez dane (Už nad 1 rok)")
-                    list_dat_oslobodenia.append("Už oslobodené")
-                    list_cakania.append("0 dní")
-                else:
-                    ks_mlade += vziat_ks
-                    vydavok_mladeho_balika += cena_balika
-                    list_stavov.append("🔴 Zdaňuje sa (Mladá akcia)")
