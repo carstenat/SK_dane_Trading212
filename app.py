@@ -30,7 +30,8 @@ if uploaded_files:
         ticker_surovy = str(riadok['Ticker'])
         full_name = str(riadok.get('Name', 'Neznáma spoločnosť')).strip()
         
-        ticker = ticker_surovy.replace("US ", "").replace("_US", "").strip()
+        # NEPRIESTRELNÝ ČISTIČ TICKEROV (POISTENIE PRE BERKSHIRE BRK.B)
+        ticker = ticker_surovy.replace("US ", "").replace("_US", "").replace("_US_EQ", "").replace("_EQ", "").strip()
         
         if pd.notna(riadok.get('Name')) and ticker != 'nan' and ticker:
             if ticker not in databaza_mien or len(full_name) > len(databaza_mien[ticker]):
@@ -54,7 +55,6 @@ if uploaded_files:
             vysledky_po_rokoch[rok]['div_dan'] += tax
             continue
             
-        # Ignorujeme drobné splitové anomálie brokera
         if ('sell' in typ or 'divestment' in typ or 'withdrawal' in typ) and abs(result) < 2.0 and total < 10.0:
             continue
             
@@ -70,9 +70,14 @@ if uploaded_files:
             riadok_vydavok = 0.0
             
             if ticker in sklad and sklad[ticker]:
-                # BEZPEČNÁ FIFO SLUČKA S OCHRANOU PROTI MIKRO-ZOSTATKOM (1e-6)
-                while predat_este > 1e-6 and sklad[ticker]:
-                    najstarsie = sklad[ticker][0]
+                temp_sklad = list(sklad[ticker])
+                sklad[ticker] = []
+                
+                for najstarsie in temp_sklad:
+                    if predat_este <= 1e-6:
+                        sklad[ticker].append(najstarsie)
+                        continue
+                        
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
@@ -84,7 +89,6 @@ if uploaded_files:
                             riadok_do_roka += (result * pomer)
                             riadok_vydavok += (najstarsie['shares'] * najstarsie['cena_za_kus'])
                         predat_este -= najstarsie['shares']
-                        sklad[ticker].pop(0)
                     else:
                         pomer = predat_este / abs(shares)
                         if splnil_rok: 
@@ -93,7 +97,8 @@ if uploaded_files:
                             riadok_do_roka += (result * pomer)
                             riadok_vydavok += (predat_este * najstarsie['cena_za_kus'])
                         
-                        najstarsie['shares'] -= predat_este
+                        zostatok_shares = najstarsie['shares'] - predat_este
+                        sklad[ticker].append({'shares': zostatok_shares, 'date': najstarsie['date'], 'cena_za_kus': najstarsie['cena_za_kus']})
                         predat_este = 0.0
                         
             vysledky_po_rokoch[rok]['zisk_do_roka'] += riadok_do_roka
@@ -102,9 +107,9 @@ if uploaded_files:
                 vysledky_po_rokoch[rok]['prijmy_kratkodobe'] += total
                 vysledky_po_rokoch[rok]['vydavky_kratkodobe'] += riadok_vydavok
 
-    st.success("🚀 Analýza histories úspešne dokončená!")
+    st.success("🚀 Analýza histórie úspešne dokončená!")
     
-    # ROČNÉ PREHĽADY HORE
+    # ROČNÉ PREHĽADY
     roky_zoznam = sorted(list(vysledky_po_rokoch.keys()), reverse=True)
     moje_tabs = st.tabs([f"📅 Rok {r}" for r in roky_zoznam])
     
@@ -142,13 +147,12 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - IZOLOVANÝ A PLOCHÝ TOK DÁT
+    # 2. KROK: DEFINITÍVNY OPTIMALIZÁTOR - PURE PYTHON LOGIKA
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     st.write("Aplikácia analyzovala históriu nákupov. Vyberte firmu a zadajte váš aktuálny otvorený stav z platformy Trading 212.")
     
-    # Zobrazíme iba tie tickery, ktoré majú v pamäti reálny zostatok nákupov nad 0.01 ks
     aktivne_tickery = []
     for t in sklad.keys():
         zostatok_na_skladu = sum(item['shares'] for item in sklad[t])
@@ -158,7 +162,7 @@ if uploaded_files:
     aktivne_tickery = sorted(aktivne_tickery)
     
     if not aktivne_tickery:
-        st.info("Vo vašej histórii momentálne nezostali žiadne otvorené pozície akcií (všetko je reálne predané).")
+        st.info("Vo vašej histórii momentálne nezostali žiadne otvorené pozície akcií.")
     else:
         ponuka_pre_menu = []
         mapovanie = {}
@@ -170,10 +174,9 @@ if uploaded_files:
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         vybrany_ticker = mapovanie[vybrany_text]
         
-        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne vidíte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_autenticky_t212")
+        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne vidíte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_autenticky_t212_vFINAL")
         
         if skutocny_stav_mobil > 0:
-            # Zoberieme čistú, hlbokú kópiu aktuálneho stavu skladu pre vybranú akciu
             nákupy_vsetky = []
             for item in sklad[vybrany_ticker]:
                 nákupy_vsetky.append({'shares': item['shares'], 'date': item['date']})
@@ -182,8 +185,7 @@ if uploaded_files:
             nákupy_skutocne = []
             potrebne_ks = skutocny_stav_mobil
             
-            # Vyberieme presne chronologické balíčky do výšky zadaného stavu
+            # PURE MATEMATIKA BEZ TROJBODIEK (OPRAVENÝ NEREAGUJÚCI ENTER)
             for n in nákupy_vsetky:
                 if potrebne_ks <= 0:
                     break
-                vziat_ks = min(n['shares'], ... if False else potrebne_ks)
