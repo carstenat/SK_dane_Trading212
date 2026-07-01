@@ -113,8 +113,10 @@ if uploaded_files:
         
         with st.tabs_obj[index]:
             col1, col2 = st.columns(2)
-            col1.metric("Celková daňová povinnosť", f"{celkovo:.2f} EUR")
-            col2.metric("Dlhodobý zisk (BEZ DANE)", f"{v['zisk_po_roku']:.2f} EUR")
+            col1.metric("Celková daňová povinnosť", f"{celkovo:.2f} EUR", 
+                        help="Celková suma dane z úrokov a krátkodobých ziskov nad limit 500€ + zdravotné odvody. Toto musíte zaplatiť štátu.")
+            col2.metric("Dlhodobý zisk (BEZ DANE)", f"{v['zisk_po_roku']:.2f} EUR", 
+                        help="Zisk z akcií, ktoré ste držali dlhšie ako 1 rok. Tieto peniaze sú kompletne oslobodené od dane a netreba ich nikam hlásiť.")
             st.markdown("---")
             st.subheader("📑 VIII. ODDIEL - Kapitálový majetok")
             st.write(f"**Riadok 2 (Úroky z vkladov):** Príjmy: `{v['uroky']:.2f} EUR` | Daň: `{realna_dan_uroky:.2f} EUR`")
@@ -133,7 +135,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR OVERENÝ STAVOM Z APLIKÁCIE TRADING 212
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR S CHROMATICKOU DAŇOVOU TABUĽKOU
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -152,7 +154,6 @@ if uploaded_files:
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         vybrany_ticker = mapovanie[vybrany_text]
         
-        # OPRAVENÝ UNIVERZÁLNY TEXT (MOBIL -> APLIKÁCIA TRADING 212)
         skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne SKUTOČNE vidíte v aplikácii Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f")
         
         if skutocny_stav_mobil > 0:
@@ -176,15 +177,20 @@ if uploaded_files:
             ks_bez_dane = 0.0
             ks_mlade = 0.0
             
+            # Príprava riadkov pre našu peknú novú tabuľku
+            riadky_tabulky = []
+            
             for n in nákupy_skutocne:
                 vek_dni = (dnes - n['date'].to_pydatetime()).days if hasattr(n['date'], 'to_pydatetime') else (dnes - n['date']).days
+                datum_nakupu_str = n['date'].strftime('%d.%m.%Y')
+                
                 if vek_dni >= 365:
                     ks_bez_dane += n['shares']
+                    riadky_tabulky.append({
+                        "Dátum nákupu": datum_nakupu_str,
+                        "Množstvo (ks)": f"{n['shares']:.5f}",
+                        "Daňový stav": "🟢 Bez dane (Nad 1 rok)",
+                        "Dátum oslobodenia": "Už oslobodené",
+                        "Zostáva čakať": "0 dní (Voľný predaj)"
+                    })
                 else:
-                    ks_mlade += n['shares']
-            
-            c1, c2 = st.columns(2)
-            c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**")
-            c2.warning(f"🔒 MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes):\n**{ks_mlade:.5f} ks**")
-        else:
-            st.info("Pre zobrazenie daňového breakdownu zadajte do políčka vyššie množstvo väčšie ako 0.")
