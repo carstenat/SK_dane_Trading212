@@ -116,7 +116,7 @@ if uploaded_files:
             col1.metric("Celková daňová povinnosť", f"{celkovo:.2f} EUR", 
                         help="Celková suma dane z úrokov a krátkodobých ziskov nad limit 500€ + zdravotné odvody. Toto musíte zaplatiť štátu.")
             col2.metric("Dlhodobý zisk (BEZ DANE)", f"{v['zisk_po_roku']:.2f} EUR", 
-                        help="Zisk z akcií, ktoré ste držali dlhšie ako 1 rok. Tieto peniaze sú kompletne oslobodené od dane a netreba ich nikam hlásiť.")
+                        help="Zisk z akcií, ktoré ste držali dlhšie ako 1 rok. Tieto peniaze sú kompletne oslobodené od dane.")
             st.markdown("---")
             st.subheader("📑 VIII. ODDIEL - Kapitálový majetok")
             st.write(f"**Riadok 2 (Úroky z vkladov):** Príjmy: `{v['uroky']:.2f} EUR` | Daň: `{realna_dan_uroky:.2f} EUR`")
@@ -135,7 +135,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - OPRAVENÝ PREKLEP NA RIADKU 169
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR OVERENÝ STAVOM Z APLIKÁCIE TRADING 212
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -166,7 +166,7 @@ if uploaded_files:
             for n in nákupy_vsetky:
                 if potrebne_ks <= 0:
                     break
-                vziat_ks = min(n['shares'], potrebne_ks) # OPRAVENÉ: Absolútne čisté priradenie bez vymyslených slovíčok
+                vziat_ks = min(n['shares'], potrebne_ks)
                 nákupy_skutocne.append({'shares': vziat_ks, 'date': n['date']})
                 potrebne_ks -= vziat_ks
             
@@ -190,3 +190,4 @@ if uploaded_files:
                     })
                 else:
                     ks_mlade += n['shares']
+                    dni_cakat = 365 - vek_dni # OPRAVENÉ: Absolútne čistá matematika bez preklepov
