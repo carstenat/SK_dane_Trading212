@@ -23,7 +23,7 @@ if uploaded_files:
     vysledky_po_rokoch = {}
     databaza_mien = {}
     
-    # FIFO logika a spracovanie celej histórie (zohľadňuje klasické obchody aj Pie koláče)
+    # FIFO logika a spracovanie celej histórie (klasické obchody aj Pie koláče)
     for _, riadok in df.iterrows():
         typ = str(riadok['Action']).lower()
         ticker_surovy = str(riadok['Ticker'])
@@ -55,12 +55,12 @@ if uploaded_files:
         if ('sell' in typ or 'divestment' in typ) and abs(result) < 2.0 and total < 10.0:
             continue
             
-        # ROZŠÍRENÝ FILTER PRE NÁKUPY (Klasické + Koláče)
+        # NÁKUPY (Klasické + Pie)
         if 'buy' in typ or 'investment' in typ:
             if ticker not in sklad: sklad[ticker] = []
             sklad[ticker].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares if shares > 0 else 0.0})
             
-        # ROZŠÍRENÝ FILTER PRE PREDAJE (Klasické + Koláče)
+        # PREDAJE (Klasické + Pie)
         elif ('sell' in typ or 'divestment' in typ) and shares > 0:
             predat_este = shares
             riadok_po_roku = 0.0
@@ -134,7 +134,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR S FILTROM NA PIE KOLÁČE
+    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR - PREPÍNAČ NA SKRYTIE STARÝCH OPERÁCIÍ
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -146,7 +146,6 @@ if uploaded_files:
     for t in sklad.keys():
         celkovo_ks = sum(n['shares'] for n in sklad[t])
         if skryt_stare:
-            # Tolerancia nastavená na 0.01 ks, aby prešli čisté pozície a zmizol prach
             if celkovo_ks >= 0.01:
                 aktivne_tickery.append(t)
         else:
@@ -201,3 +200,5 @@ if uploaded_files:
                 st.markdown("### 📅 Kedy predáte zvyšok bez dane?")
                 st.write("Tu je prehľad balíčkov, ktoré ešte musíte podržať:")
                 for pm in podrobnosti_mlade:
+                    st.write(f"• Fragment o veľkosti **{pm['shares']:.5f} ks** (nakúpený {pm['date']}) bude oslobodený o **{pm['dni_cakat']} dní**.")
+    else:
