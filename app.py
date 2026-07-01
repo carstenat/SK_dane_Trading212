@@ -2,31 +2,49 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-st.set_page_config(page_title="Trading 212 Daňový Asistent & Optimalizátor", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Trading 212 PRO Daňový Optimalizátor", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 🎨 PREPÍNAČ PRE DARK MODE (ČISTÉ CSS)
+# 🎨 ULTRA-KOMPAKTNÝ FINTECH LUXUSNÝ DIZAJN (PRE MOBIL, TABLET AJ DESKTOP)
 # =========================================================================
-st.sidebar.header("⚙️ Nastavenia vzhľadu")
+st.sidebar.header("⚙️ Vzhľad a Vychytávky")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=True)
 
 if dark_mode:
     st.markdown("""
         <style>
-        .stApp { background-color: #121214 !important; color: #E1E1E6 !important; }
-        h1, h2, h3, h4, h5, h6, label, p, span { color: #F4F4F5 !important; }
-        .stTabs [data-baseweb="tab-list"] { background-color: #1A1A1E !important; border-radius: 8px; padding: 5px; }
-        .stTabs [data-baseweb="tab"] { color: #A1A1AA !important; }
-        .stTabs [aria-selected="true"] { color: #38BDF8 !important; font-weight: bold; }
-        div[data-testid="stMetricValue"] { color: #38BDF8 !important; }
-        .stDataFrame div { background-color: #1A1A1E !important; color: #E1E1E6 !important; }
+        /* Celkové zmenšenie medzier a kompaktnejší text */
+        .stApp { background-color: #0F172A !important; color: #E2E8F0 !important; font-size: 14px !important; }
+        h1 { font-size: 22px !important; font-weight: 700 !important; color: #F8FAFC !important; margin-bottom: 5px !important; }
+        h2 { font-size: 18px !important; font-weight: 600 !important; color: #F1F5F9 !important; margin-top: 15px !important; }
+        h3 { font-size: 15px !important; font-weight: 600 !important; color: #E2E8F0 !important; }
+        div.block-container { padding-top: 1.5rem !important; padding-bottom: 1rem !important; }
+        
+        /* Moderné zaoblené karty pre metriky */
+        div[data-testid="stMetric"] {
+            background-color: #1E293B !important;
+            border: 1px solid #334155 !important;
+            border-radius: 12px !important;
+            padding: 12px 16px !important;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1) !important;
+        }
+        div[data-testid="stMetricValue"] { color: #38BDF8 !important; font-size: 20px !important; font-weight: 700 !important; }
+        div[data-testid="stMetricLabel"] { color: #94A3B8 !important; font-size: 12px !important; }
+        
+        /* Responzívne a čisté záložky (Tabs) */
+        .stTabs [data-baseweb="tab-list"] { background-color: #1E293B !important; border-radius: 10px; padding: 4px; gap: 4px; }
+        .stTabs [data-baseweb="tab"] { color: #94A3B8 !important; padding: 6px 12px !important; font-size: 13px !important; border-radius: 6px; }
+        .stTabs [aria-selected="true"] { background-color: #0EA5E9 !important; color: #FFFFFF !important; font-weight: 600 !important; }
+        
+        /* Poistenie tabuliek pre perfektné zobrazenie na mobile */
+        .stDataFrame div { background-color: #1E293B !important; color: #E2E8F0 !important; border-radius: 8px; }
         </style>
     """, unsafe_allow_html=True)
 
-st.title("📈 Súkromný Daňový Asistent a Optimalizátor pre Trading 212 (SR)")
-st.write("Nahrajte svoje CSV exporty z Trading 212 a získajte ročný daňový manuál + checker pre bezpečný predaj akcií.")
+st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
+st.write("Profesionálny nástroj na kontrolu časového testu pred predajom a automatickú ročnú daňovú uzávierku.")
 
-uploaded_files = st.file_uploader("Sem presuňte vaše CSV súbory (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
+uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
 
 if uploaded_files:
     zoznam_df = []
@@ -37,10 +55,9 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    # Vyčistíme názvy tickerov do jednotného formátu
+    # Príprava unifikovaných dát
     df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", "").str.replace(".", "").str.replace(" ", "").str.upper()
     
-    # Vybudujeme databázu celých názvov spoločností
     databaza_mien = {}
     for _, riadok in df.iterrows():
         tick_c = str(riadok['Ticker_Clean'])
@@ -50,11 +67,9 @@ if uploaded_files:
                 databaza_mien[tick_c] = full_name
 
     # =========================================================================
-    # 🔥 1. ČASŤ: DAŇOVÝ OPTIMALIZÁTOR (NAVRCHU STRÁNKY)
+    # 🔥 1. ČASŤ: PROFESIONÁLNY DAŇOVÝ OPTIMALIZÁTOR PRED PREDAJOM
     # =========================================================================
-    st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
-    st.write("Vyberte firmu zo zoznamu a zadajte aktuálny otvorený stav, ktorý vidíte v platforme Trading 212.")
     
     df_akcie = df[df['Action'].str.lower().str.contains('buy|investment|deposit|sell|divestment|withdrawal|rebalancing', na=False)].copy()
     zoznam_tickerov_all = sorted(list(df_akcie['Ticker_Clean'].unique()))
@@ -64,18 +79,22 @@ if uploaded_files:
         mapovanie_tickerov = {}
         for t in zoznam_tickerov_all:
             full_company_name = databaza_mien.get(t, "Spoločnosť z platformy")
-            text_riadku = f"{t} - {full_company_name}"
-            ponuka_pre_menu.append(text_riadku)
-            mapovanie_tickerov[text_riadku] = t
+            ponuka_pre_menu.append(f"{t} - {full_company_name}")
+            mapmapping_check = t
+            mapovanie_tickerov[f"{t} - {full_company_name}"] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia:", ponuka_pre_menu)
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
-        # POLÍČKO PRE KUSY S JEDINEČNÝM KĽÚČOM
-        skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker_pure}, ktorý momentálne vidíte v platforme:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_optimalizator_v15")
+        # Rozdelenie vstupu do dvoch stĺpcov pre maximálnu kompaktnosť na mobiloch
+        col_input1, col_input2 = st.columns(2)
+        with col_input1:
+            skutocny_stav = st.number_input("Počet kusov vlastnených na T212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_pro_v15")
+        with col_input2:
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie (EUR) - voliteľné:", min_value=0.0, value=0.0, step=0.01, format="%.2f", help="Zadajte dnešnú cenu z T212 pre výpočet očakávaného zisku a daňových dopadov.")
         
-        # Rekonštrukcia skladu pomocou FIFO
+        # Rekonštrukcia aktuálneho skladu cez FIFO
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].copy()
         df_ticker = df_ticker.sort_values(by='Time').reset_index(drop=True)
         
@@ -83,11 +102,12 @@ if uploaded_files:
         for _, riadok in df_ticker.iterrows():
             typ = str(riadok['Action']).lower()
             shares = float(riadok['No. of shares']) if pd.notna(riadok['No. of shares']) else 0.0
+            total = float(riadok['Total']) if pd.notna(riadok['Total']) else 0.0
             datum = riadok['Time']
             
             if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
                 if shares > 0:
-                    sklad_aktualny.append({'shares': shares, 'date': datum})
+                    sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares if shares > 0 else 0.0})
             elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
                 predat_este = abs(shares)
                 temp_sklad = []
@@ -108,6 +128,7 @@ if uploaded_files:
             dnes = datetime.now()
             ks_bez_dane = 0.0
             ks_mlade = 0.0
+            odhadovany_vydavok_mlade = 0.0
             
             list_dat_nakupu = []
             list_mnozstiev = []
@@ -118,7 +139,7 @@ if uploaded_files:
             for n in sklad_aktualny:
                 if potrebne_ks <= 1e-6:
                     break
-                vziat_ks = min(n['shares'], potrebné_kopirovanie :=  potrebne_ks)
+                vziat_ks = min(n['shares'], potrebne_ks)
                 potrebne_ks -= vziat_ks
                 
                 nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
@@ -134,66 +155,24 @@ if uploaded_files:
                     list_cakania.append("0 dní")
                 else:
                     ks_mlade += vziat_ks
+                    odhadovany_vydavok_mlade += (vziat_ks * n['cena_za_kus'])
                     list_stavov.append("🔴 Zdaňuje sa (Mladá akcia)")
                     list_dat_oslobodenia.append((nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y'))
                     list_cakania.append(f"⏳ {365 - vek_dni} dní")
             
+            # Grafický prehľad (Progress Bar) namiesto zložitého koláča - šetrí miesto na smartfónoch
+            pomer_safe = ks_bez_dane / skutocny_stav
+            st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
+            st.progress(float(pomer_safe))
+            
             c1, c2 = st.columns(2)
-            c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**")
-            c2.warning(f"🔒 MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes):\n**{ks_mlade:.5f} ks**")
+            c1.metric("Môžete predať IHNEĎ BEZ DANE", f"{ks_bez_dane:.5f} ks", help="Tieto akcie držíte viac ako rok. Sú kompletne oslobodené.")
             
-            st.markdown("### 📋 Detailný rozpis balíčkov na vašom sklade:")
-            tovarna_tabulky = pd.DataFrame({
-                "Dátum nákupu": list_dat_nakupu,
-                "Množstvo (ks)": list_mnozstiev,
-                "Daňový stav": list_stavov,
-                "Dátum oslobodenia": list_dat_oslobodenia,
-                "Zostáva čakať": list_cakania
-            })
-            st.dataframe(tovarna_tabulky, use_container_width=True, hide_index=True)
-            st.info("💡 **Ako čítať tabuľku:** Platforma Trading 212 predáva akcie chronologicky od najstarších (pravidlo FIFO). Sledujte zelené riadky – tie predáte bezpečne.")
-        else:
-            st.info("Pre zobrazenie daňového breakdownu zadajte do políčka vyššie množstvo väčšie ako 0.")
-
-    # =========================================================================
-    # 📑 2. ČASŤ: HISTORICKÉ ROČNÉ PREHĽADY PRE DAŇOVÉ PRIZNANIE (ÚPLNE PLOCHÁ STRUKTÚRA)
-    # =========================================================================
-    st.markdown("##")
-    st.markdown("---")
-    st.header("📑 Ročné podklady pre Daňové priznanie SR")
-    
-    sklad_historicky = {}
-    vysledky_po_rokoch = {}
-    
-    for _, riadok in df.iterrows():
-        typ = str(riadok['Action']).lower()
-        tick_c = str(riadok['Ticker_Clean'])
-        
-        if not tick_c or tick_c == 'nan':
-            continue
-            
-        shares = float(riadok['No. of shares']) if pd.notna(riadok['No. of shares']) else 0.0
-        total = float(riadok['Total']) if pd.notna(riadok['Total']) else 0.0
-        result = float(riadok['Result']) if pd.notna(riadok['Result']) else 0.0
-        tax = float(riadok['Withholding tax']) if pd.notna(riadok['Withholding tax']) else 0.0
-        datum = riadok['Time']
-        rok = datum.year
-        
-        if rok not in vysledky_po_rokoch:
-            vysledky_po_rokoch[rok] = {'uroky': 0.0, 'div_brutto': 0.0, 'div_dan': 0.0, 'zisk_do_roka': 0.0, 'zisk_po_roku': 0.0, 'prijmy_kratkodobe': 0.0, 'vydavky_kratkodobe': 0.0}
-            
-        if 'interest on cash' in typ:
-            vysledky_po_rokoch[rok]['uroky'] += total
-            continue
-            
-        if 'dividend' in typ:
-            vysledky_po_rokoch[rok]['div_brutto'] += (total + tax)
-            vysledky_po_rokoch[rok]['div_dan'] += tax
-            continue
-            
-        if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
-            if tick_c not in sklad_historicky: 
-                sklad_historicky[tick_c] = []
-            if shares > 0:
-                sklad_historicky[tick_c].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
-            
+            # Ak používateľ zadal cenu, prepočítame reálnu hrozbu dane v EUR
+            if aktualna_cena > 0 and ks_mlade > 0:
+                prijem_mlade = ks_mlade * aktualna_cena
+                cistorocny_zisk = max(0.0, prijem_mlade - odhadovany_vydavok_mlade)
+                hrozba_dane = round(cistorocny_zisk * 0.19, 2)
+                hrozba_odvodov = round(cistorocny_zisk * 0.14, 2)
+                c2.metric("MLADÉ FRAKCIE (Hrozba daní)", f"{ks_mlade:.5f} ks", f"Hrozí daň + odvody: {hrozba_dane + hrozba_odvodov:.2f} EUR", delta_color="inverse", help="Akcie držíte kratšie ako rok. Pri predaji dnes zaplatíte štátu 19% daň + 14% zdravotné odvody zo zisku.")
+            else:
