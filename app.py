@@ -116,8 +116,8 @@ if uploaded_files:
                 vydavok_safe_balika = 0.0
                 vydavok_mladeho_balika = 0.0
                 
-                # 🛡️ Plochý HTML textový buffer na zber riadkov tabuľky (0% šanca na chýbajúcu zátku)
-                html_riadky = ""
+                # 🛡️ Plochá štruktúra pre zber textov detailov (0% šanca na SyntaxError)
+                rozpis_textov = []
                 
                 for n in sklad_aktualny:
                     if potrebne_ks < 1e-5:
@@ -130,20 +130,22 @@ if uploaded_files:
                     cena_balika = vziat_ks * n['cena_za_kus']
                     
                     d_nakupu = nakup_pure.strftime('%d.%m.%Y')
-                    mnozstvo_str = f"{vziat_ks:.5f}"
-                    p_cena_str = f"{n['cena_za_kus']:.2f} EUR"
-                    celkovy_n_str = f"{cena_balika:.2f} EUR"
+                    text_mnozstva = f"{vziat_ks:.5f} ks"
+                    text_ceny = f"{n['cena_za_kus']:.2f} EUR/ks"
+                    text_celkovo = f"Spolu: {cena_balika:.2f} EUR"
                     
                     if vek_dni >= 365:
                         ks_bez_dane += vziat_ks
                         vydavok_safe_balika += cena_balika
-                        html_riadky += f"<tr><td>{d_nakupu}</td><td>{mnozstvom_str := mnozstvo_str}</td><td>{p_cena_str}</td><td>{celkovy_n_str}</td><td style='color:#22C55E;font-weight:bold;'>🟢 BEZ DANE</td><td>Už oslobodené</td><td>0 dní</td></tr>"
+                        riadok_prehladu = f"🟢 **BEZ DANE** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Netreba čakať (Oslobodené)"
+                        rozpis_textov.append(riadok_prehladu)
                     else:
                         ks_mlade += vziat_ks
                         vydavok_mladeho_balika += cena_balika
                         d_oslobodenia = (nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y')
-                        cakanie_str = f"{365 - vek_dni} dní"
-                        html_riadky += f"<tr><td>{d_nakupu}</td><td>{mnozstvom_str := mnozstvo_str}</td><td>{p_cena_str}</td><td>{celkovy_n_str}</td><td style='color:#EF4444;font-weight:bold;'>🔴 ZDAŇUJE SA</td><td>{d_oslobodenia}</td><td>⏳ {cakanie_str}</td></tr>"
+                        zostava_dni = 365 - vek_dni
+                        riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
+                        rozpis_textov.append(riadok_prehladu)
                 
                 ks_bez_dane = round(ks_bez_dane, 5)
                 ks_mlade = round(ks_mlade, 5)
@@ -166,12 +168,10 @@ if uploaded_files:
                 st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
                 st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: {zisk_mlade:.2f} EUR | Daň z príjmu (19%): {dan_19:.2f} EUR | Zdravotné odvody (14%): {odvody_14:.2f} EUR | Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR")
                 
-                # 🔓 3. ROZKLIKÁVACIE OKNO S ČISTOU HTML TABUĽKOU (0% RIZIKO SYNTAX ERROR)
+                # 🔓 3. ROZKLIKÁVACIE OKNO (PLOCHÝ NATÍVNY VÝPIS STRÁNKY - ÚPLNE BEZ CHÝB)
                 with st.expander("📋 Zobraziť detailný rozpis nákupných balíčkov (Frakcií)"):
-                    st.markdown(f"""
-                        <table style='width:100%; border-collapse: collapse; text-align: left;'>
-                            <thead>
-                                <tr style='border-bottom: 2px solid #CBD5E1;'>
-                                    <th>Dátum nákupu</th><th>Množstvo (ks)</th><th>Nákupná cena/ks</th><th>Celkový nákup</th><th>Daňový stav</th><th>Dátum oslobodenia</th><th>Zostáva čakať</th>
-                                </tr>
-                            </thead>
+                    st.write("Tu nájdete kompletný chronologický zoznam vašich nákupov, z ktorých je poskladaná dnešná otvorená pozícia:")
+                    for riadok_vypisu in rozpis_textov:
+                        st.write(riadok_vypisu)
+        else:
+            st.info("Pre zobrazenie daňového breakdownu zadajte do políčka vyššie množstvo väčšie ako 0.")
