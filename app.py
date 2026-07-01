@@ -23,7 +23,7 @@ if uploaded_files:
     vysledky_po_rokoch = {}
     databaza_mien = {}
     
-    # NEPRIESTRELNÁ FINÁLNA MATEMATIKA
+    # 1. KROK: ČISTÁ MATEMATIKA A FIFO ROČNÉ PREHĽADY
     for _, riadok in df.iterrows():
         typ = str(riadok['Action']).lower()
         ticker_surovy = str(riadok['Ticker'])
@@ -53,51 +53,49 @@ if uploaded_files:
             vysledky_po_rokoch[rok]['div_dan'] += tax
             continue
             
-        # AKCIA S KUSMI
-        if shares != 0:
-            if ('sell' in typ or 'divestment' in typ or shares < 0) and abs(result) < 2.0 and total < 10.0:
-                continue
-                
-            # ABSOLÚTNA LOGIKA NÁKUPU: Kladné kusy
-            if shares > 0 and ('buy' in typ or 'investment' in typ or 'deposit' in typ or 'received' in typ):
-                if ticker not in sklad: sklad[ticker] = []
-                sklad[ticker].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares if shares > 0 else 0.0})
-                
-            # ABSOLÚTNA LOGIKA PREDAJU: Záporné kusy alebo predajné texty
-            elif shares < 0 or 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ:
-                predat_este = abs(shares)
-                riadok_po_roku = 0.0
-                riadok_do_roka = 0.0
-                riadok_vydavok = 0.0
-                
-                if ticker in sklad and sklad[ticker]:
-                    while predat_este > 0 and sklad[ticker]:
-                        najstarsie = sklad[ticker][0]
-                        vek = datum - najstarsie['date']
-                        splnil_rok = vek.days >= 365
-                        
-                        if najstarsie['shares'] <= predat_este:
-                            pomer = najstarsie['shares'] / abs(shares)
-                            if splnil_rok: riadok_po_roku += (result * pomer)
-                            else:
-                                riadok_do_roka += (result * pomer)
-                                riadok_vydavok += (najstarsie['shares'] * najstarsie['cena_za_kus'])
-                            predat_este -= najstarsie['shares']
-                            sklad[ticker].pop(0)
+        # OČISTENIE OD DROBNÝCH DIER BROKERA PRI SPLITOCH
+        if ('sell' in typ or 'divestment' in typ or 'withdrawal' in typ) and abs(result) < 2.0 and total < 10.0:
+            continue
+            
+        # SPRACUJEME VÝHRADNE SKUTOČNÉ INVESTIČNÉ AKCIE (IGNORUJEME DIVIDENDOVÉ RIADKY PRE SKLAD)
+        if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
+            if ticker not in sklad: sklad[ticker] = []
+            sklad[ticker].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares if shares > 0 else 0.0})
+            
+        elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
+            predat_este = abs(shares)
+            riadok_po_roku = 0.0
+            riadok_do_roka = 0.0
+            riadok_vydavok = 0.0
+            
+            if ticker in sklad and sklad[ticker]:
+                while predat_este > 0 and sklad[ticker]:
+                    najstarsie = sklad[ticker][0]
+                    vek = datum - najstarsie['date']
+                    splnil_rok = vek.days >= 365
+                    
+                    if najstarsie['shares'] <= predat_este:
+                        pomer = najstarsie['shares'] / abs(shares)
+                        if splnil_rok: riadok_po_roku += (result * pomer)
                         else:
-                            pomer = predat_este / abs(shares)
-                            if splnil_rok: riadok_po_roku += (result * pomer)
-                            else:
-                                riadok_do_roka += (result * pomer)
-                                riadok_vydavok += (predat_este * najstarsie['cena_za_kus'])
-                            najstarsie['shares'] -= predat_este
-                            predat_este = 0.0
-                            
-                vysledky_po_rokoch[rok]['zisk_do_roka'] += riadok_do_roka
-                vysledky_po_rokoch[rok]['zisk_po_roku'] += riadok_po_roku
-                if riadok_do_roka != 0:
-                    vysledky_po_rokoch[rok]['prijmy_kratkodobe'] += total
-                    vysledky_po_rokoch[rok]['vydavky_kratkodobe'] += riadok_vydavok
+                            riadok_do_roka += (result * pomer)
+                            riadok_vydavok += (najstarsie['shares'] * najstarsie['cena_za_kus'])
+                        predat_este -= najstarsie['shares']
+                        sklad[ticker].pop(0)
+                    else:
+                        pomer = predat_este / abs(shares)
+                        if splnil_rok: riadok_po_roku += (result * pomer)
+                        else:
+                            riadok_do_roka += (result * pomer)
+                            riadok_vydavok += (predat_este * najstarsie['cena_za_kus'])
+                        najstarsie['shares'] -= predat_este
+                        predat_este = 0.0
+                        
+            vysledky_po_rokoch[rok]['zisk_do_roka'] += riadok_do_roka
+            vysledky_po_rokoch[rok]['zisk_po_roku'] += riadok_po_roku
+            if riadok_do_roka != 0:
+                vysledky_po_rokoch[rok]['prijmy_kratkodobe'] += total
+                vysledky_po_rokoch[rok]['vydavky_kratkodobe'] += riadok_vydavok
 
     st.success("🚀 Analýza úspešne dokončená!")
     
@@ -128,7 +126,7 @@ if uploaded_files:
             if v['zisk_do_roka'] <= 0:
                 st.info(f"Utrpeli ste stratu ({v['zisk_do_roka']:.2f} EUR). Netreba nič vypĺňať.")
             else:
-                if prepočet_ok := priznany_zisk_po_oslobodeni == 0:
+                if priznany_zisk_po_oslobodeni == 0:
                     st.info(f"Zisk {v['zisk_do_roka']:.2f} EUR nepresiahol 500 EUR. Je oslobodený.")
                 else:
                     pomer = priznany_zisk_po_oslobodeni / v['zisk_do_roka']
@@ -137,25 +135,18 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR - S FUNKCIOU ČIERNEJ LISTINY (BLACKLIST)
+    # 2. KROK: DNEŠNÝ OPTIMALIZÁTOR - PÁROVANIE S DROBNÝM LIMITOM PRE PRACH < 0.05 KS
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
-    
-    # MANUÁLNY FILTER PRE PÁNA APPLIKÁCIE
-    blacklist_vstup = st.text_input("🛡️ Čierna listina tickerov (Zadajte skratky oddelené čiarkou firiem, ktoré chcete NATVRDO SKRYŤ, napr. AVGO, RACE, ORCL):", value="")
-    čierna_listina = [t.strip().upper() for t in blacklist_vstup.split(",") if t.strip()]
+    st.write(f"Aplikácia analyzovala váš skutočný aktuálny otvorený sklad k dnešnému dňu ({datetime.now().strftime('%d.%m.%Y')}).")
     
     skryt_stare = st.checkbox("⚙️ Skryť akcie, ktoré som už kompletne predal (Zobraziť len aktuálne portfólio)", value=True)
     
     aktivne_tickery = []
     for t in sklad.keys():
-        # Ak je ticker na čiernej listine, úplne ho preskočíme
-        if t.upper() in čierna_listina:
-            continue
-            
         celkovo_ks = sum(n['shares'] for n in sklad[t])
-        if skryt_stare and celkovo_ks >= 0.01:
+        if skryt_stare and celkovo_ks >= 0.05: # AKO V COLABE: Čistá stopka pre akýkoľvek prach
             aktivne_tickery.append(t)
         elif not skryt_stare and celkovo_ks > 0.0001:
             aktivne_tickery.append(t)
@@ -195,3 +186,10 @@ if uploaded_files:
                     podrobnosti_mlade.append({'shares': n['shares'], 'date': n['date'].strftime('%d.%m.%Y'), 'dni_cakat': dni_do_roka})
             
             c1, c2 = st.columns(2)
+            c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**")
+            c2.warning(f"🔒 MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes):\n**{ks_mlade:.5f} ks**")
+            
+            if ks_mlade > 0:
+                st.markdown("### 📅 Kedy predáte zvyšok bez dane?")
+                st.write("Tu je prehľad balíčkov, ktoré ešte musíte podržať:")
+                for pm in podrobnosti_mlade:
