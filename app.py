@@ -23,7 +23,7 @@ if uploaded_files:
     vysledky_po_rokoch = {}
     databaza_mien = {}
     
-    # FIFO logika a spracovanie celej histórie
+    # FIFO logika a spracovanie celej histórie (zohľadňuje klasické obchody aj Pie koláče)
     for _, riadok in df.iterrows():
         typ = str(riadok['Action']).lower()
         ticker_surovy = str(riadok['Ticker'])
@@ -52,13 +52,16 @@ if uploaded_files:
             vysledky_po_rokoch[rok]['div_brutto'] += (total + tax)
             vysledky_po_rokoch[rok]['div_dan'] += tax
             continue
-        if 'sell' in typ and abs(result) < 2.0 and total < 10.0:
+        if ('sell' in typ or 'divestment' in typ) and abs(result) < 2.0 and total < 10.0:
             continue
             
-        if 'buy' in typ:
+        # ROZŠÍRENÝ FILTER PRE NÁKUPY (Klasické + Koláče)
+        if 'buy' in typ or 'investment' in typ:
             if ticker not in sklad: sklad[ticker] = []
             sklad[ticker].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares if shares > 0 else 0.0})
-        elif 'sell' in typ and shares > 0:
+            
+        # ROZŠÍRENÝ FILTER PRE PREDAJE (Klasické + Koláče)
+        elif ('sell' in typ or 'divestment' in typ) and shares > 0:
             predat_este = shares
             riadok_po_roku = 0.0
             riadok_do_roka = 0.0
@@ -131,7 +134,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR - OPRAVENÉ ZAROVNANIE RÍADKOV
+    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR S FILTROM NA PIE KOLÁČE
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -143,7 +146,8 @@ if uploaded_files:
     for t in sklad.keys():
         celkovo_ks = sum(n['shares'] for n in sklad[t])
         if skryt_stare:
-            if celkovo_ks >= 0.49:
+            # Tolerancia nastavená na 0.01 ks, aby prešli čisté pozície a zmizol prach
+            if celkovo_ks >= 0.01:
                 aktivne_tickery.append(t)
         else:
             if celkovo_ks > 0.0001:
@@ -197,6 +201,3 @@ if uploaded_files:
                 st.markdown("### 📅 Kedy predáte zvyšok bez dane?")
                 st.write("Tu je prehľad balíčkov, ktoré ešte musíte podržať:")
                 for pm in podrobnosti_mlade:
-                    st.write(f"• Fragment o veľkosti **{pm['shares']:.5f} ks** (nakúpený {pm['date']}) bude oslobodený o **{pm['dni_cakat']} dní**.")
-    else:
-        st.info("Vo vašej histórii momentálne nezostali žiadne otvorené pozície akcií (všetko je predané).")
