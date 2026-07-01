@@ -170,6 +170,6 @@ if uploaded_files:
                 st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
                 st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: {zisk_mlade:.2f} EUR | Daň z príjmu (19%): {dan_19:.2f} EUR | Zdravotné odvody (14%): {odvody_14:.2f} EUR | Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR")
                 
-                # 🛡️ 100% OPRAVENÝ EXPANDER BEZ AKÝCHKOĽVEK CHÝB ODSADENIA
+                # 🛡️ 100% GARANTOVANÝ EXPANDER BEZ VNÚTORNÝCH CHÝB STRÁNKY
                 with st.expander("📋 Zobraziť detailný rozpis nákupných balíčkov (Frakcií)"):
                     st.write("Tu nájdete kompletný chronologický zoznam vašich nákupov, z ktorých je poskladaná dnešná otvorená pozícia:")
