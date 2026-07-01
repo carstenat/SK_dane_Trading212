@@ -135,7 +135,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: OPTIMALIZÁTOR - NOVÝ UNIKÁTNY KĽÚČ PRE PREHLIADAČ
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - OPRAVENÝ PREKLEP NA RIADKU 169
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -154,7 +154,6 @@ if uploaded_files:
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         vybrany_ticker = mapovanie[vybrany_text]
         
-        # 💡 ZMENENÝ KĽÚČ PREMENNEJ (key=), KTORÝ PREMAŽE ZASEKNUTÚ CACHE PREHLIADAČA NATVRDO
         skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne SKUTOČNE vidíte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_t212")
         
         if skutocny_stav_mobil > 0:
@@ -167,7 +166,7 @@ if uploaded_files:
             for n in nákupy_vsetky:
                 if potrebne_ks <= 0:
                     break
-                vziat_ks = min(n['shares'], preventable_ks := potrebne_ks)
+                vziat_ks = min(n['shares'], potrebne_ks) # OPRAVENÉ: Absolútne čisté priradenie bez vymyslených slovíčok
                 nákupy_skutocne.append({'shares': vziat_ks, 'date': n['date']})
                 potrebne_ks -= vziat_ks
             
@@ -191,4 +190,3 @@ if uploaded_files:
                     })
                 else:
                     ks_mlade += n['shares']
-                    dni_cakat = 365 - vek_dni
