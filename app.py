@@ -54,13 +54,14 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    # 🛡️ Garantované numerické zaistenie typov proti chybám textov v CSV
+    # Numerické poistenie všetkých finančných hodnôt
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
     df['Result'] = pd.to_numeric(df['Result'], errors='coerce').fillna(0.0)
     df['Withholding tax'] = pd.to_numeric(df['Withholding tax'], errors='coerce').fillna(0.0)
     
-    df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", "").str.replace(".", "").str.replace(" ", "").str.upper()
+    # 🛡️ SUROVÉ A BEZPEČNÉ PÁROVANIE: Necháme ticker presne tak, ako ho stvoril broker Trading 212
+    df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
     
     databaza_mien = {}
     for _, riadok in df.iterrows():
@@ -89,18 +90,18 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v110")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v120")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            skutocny_stav = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v110")
+            skutocny_stav = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v120")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v110")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v120")
         
+        # 🛡️ Rekonštrukcia skladu s garantovaným spárovaním surového tickeru
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
-        # 🛡️ 100% LINEÁRNE FIFO PRE SKLAD (ČISTÝ FOR-CYKLUS - NIKDY NEZAMRZNE)
         sklad_aktualny = []
         for _, riadok in df_ticker.iterrows():
             typ = str(riadok['Action']).lower()
@@ -136,7 +137,6 @@ if uploaded_files:
             list_dat_oslobodenia = []
             list_cakania = []
             
-            # 🛡️ LINEÁRNY PREPOČET OPTIMALIZÁTORA (ÚPLNE BEZ PREKLEPOV S WALRUS OPERÁTOROM)
             for n in sklad_aktualny:
                 if potrebne_ks < 1e-5:
                     break
@@ -166,3 +166,9 @@ if uploaded_files:
                     list_cakania.append(f"⏳ {365 - vek_dni} dní")
             
             pomer_safe = ks_bez_dane / skutocny_stav
+            st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
+            st.progress(float(pomer_safe))
+            
+            c1, c2 = st.columns(2)
+            
+            if aktualna_cena > 0:
