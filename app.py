@@ -72,7 +72,7 @@ if uploaded_files:
                 
                 if ticker in sklad and sklad[ticker]:
                     while predat_este > 0 and sklad[ticker]:
-                        najstarsie = sklad[ticker][0] # OPRAVENÉ: Presný index na prvý nákup v zozname
+                        najstarsie = sklad[ticker][0]
                         vek = datum - najstarsie['date']
                         splnil_rok = vek.days >= 365
                         
@@ -128,7 +128,7 @@ if uploaded_files:
             if v['zisk_do_roka'] <= 0:
                 st.info(f"Utrpeli ste stratu ({v['zisk_do_roka']:.2f} EUR). Netreba nič vypĺňať.")
             else:
-                if priznany_zisk_po_oslobodeni == 0:
+                if prepočet_ok := priznany_zisk_po_oslobodeni == 0:
                     st.info(f"Zisk {v['zisk_do_roka']:.2f} EUR nepresiahol 500 EUR. Je oslobodený.")
                 else:
                     pomer = priznany_zisk_po_oslobodeni / v['zisk_do_roka']
@@ -137,7 +137,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR - PREPÍNAČ NA SKRYTIE STARÝCH OPERÁCIÍ
+    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR - UPRAVENÝ LIMIT NA 0.10 KS PRE PRACH
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -148,7 +148,7 @@ if uploaded_files:
     aktivne_tickery = []
     for t in sklad.keys():
         celkovo_ks = sum(n['shares'] for n in sklad[t])
-        if skryt_stare and celkovo_ks >= 0.01:
+        if skryt_stare and celkovo_ks >= 0.10: # DÔSLEDNÝ LIMIT NA VYMAZANIE DROBNÝCH ZOSTATKOV
             aktivne_tickery.append(t)
         elif not skryt_stare and celkovo_ks > 0.0001:
             aktivne_tickery.append(t)
