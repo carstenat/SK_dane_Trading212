@@ -30,6 +30,7 @@ if uploaded_files:
         ticker_surovy = str(riadok['Ticker'])
         full_name = str(riadok.get('Name', 'Neznáma spoločnosť')).strip()
         
+        # UNIVERZÁLNY ČISTIČ JADRA (BRK B, BRK_B, BRK.B -> VŠETKO BUDE ULOŽENÉ AKO BRK.B)
         ticker = ticker_surovy.replace("US ", "").replace("_US", "").replace("_US_EQ", "").replace("_EQ", "").replace(".US", "").strip()
         ticker = ticker.replace("_", ".").replace(" ", ".").upper()
         
@@ -143,7 +144,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - UZAMKNUTÝ FORMULÁR (100% FUNKČNÝ)
+    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - FORMULÁR S UNIVERZÁLNYM PÁROVANÍM
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -162,8 +163,7 @@ if uploaded_files:
     if not zoznam_vsetkych_tickerov:
         st.info("V nahratých súboroch sa nenachádzajú žiadne nákupné transakcie.")
     else:
-        # 🔥 FORMULÁROVÝ BLOK - PRINÚTI SERVER DRŽAŤ INPUT V PAMÄTI
-        with st.form(key="daňový_kontrolný_formulár"):
+        with st.form(key="definitivny_form_ok_t212"):
             ponuka_pre_menu = []
             mapovanie = {}
             for t in zoznam_vsetkych_tickerov:
@@ -178,6 +178,6 @@ if uploaded_files:
             
             tlacidlo_spustenia = st.form_submit_button(label="🚀 Spustiť daňovú kontrolu pozície")
             
-        # VÝPOČET SA SPUSTÍ AŽ PO KLIKNUTÍ NA TLAČIDLO (STOP ZAMŔZANIU)
         if tlacidlo_spustenia and skutocny_stav_mobil > 0:
             ciste_nakupy_tickeru = []
+            for _, riadok in df.iterrows():
