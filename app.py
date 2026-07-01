@@ -23,7 +23,7 @@ if uploaded_files:
     vysledky_po_rokoch = {}
     databaza_mien = {}
     
-    # 1. KROK: BEZPEČNÁ HISTORICKÁ FIFO MATEMATIKA (BEZ RIZIKA ZACYKLENIA)
+    # 1. KROK: HISTORICKÁ FIFO MATEMATIKA PRE DANÉ ROKY
     for _, riadok in df.iterrows():
         typ = str(riadok['Action']).lower()
         ticker_surovy = str(riadok['Ticker'])
@@ -142,7 +142,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: PLOCHÝ OPTIMALIZÁTOR - BEZ NEBEZPEČNÝCH MEDZIER A SLUČIEK
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - 100% PREČISTENÁ MATEMATIKA
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
