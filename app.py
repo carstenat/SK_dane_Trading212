@@ -6,7 +6,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 Daňová Kalkulačka", page_icon="📈", layout="wide")
 
 st.title("📈 Súkromný Daňový Asistent a Optimalizátor pre Trading 212 (SR)")
-st.write("Nahrajte svoje CSV exporty z Trading 212 a získajte ročný daňový manuál + checker pre bezpečný predaj akcií.")
+st.write("Nahrajte svoje CSV exporty z Trading 212 a získajte ročný daňový manuál + checker pre safe predaj akcií.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV súbory (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
 
@@ -67,11 +67,15 @@ if uploaded_files:
             riadok_vydavok = 0.0
             
             if ticker in sklad and sklad[ticker]:
-                while predat_este > 0:
-                    if not sklad[ticker]:
-                        break
+                # BEZPEČNÝ CHROMATICKÝ SKOK (NULOVÉ RIZIKO ZACYKLENIA)
+                temp_sklad = list(sklad[ticker])
+                sklad[ticker] = []
+                
+                for najstarsie in temp_sklad:
+                    if predat_este <= 0:
+                        sklad[ticker].append(najstarsie)
+                        continue
                         
-                    najstarsie = sklad[ticker][0]
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
@@ -82,14 +86,15 @@ if uploaded_files:
                             riadok_do_roka += (result * pomer)
                             riadok_vydavok += (najstarsie['shares'] * najstarsie['cena_za_kus'])
                         predat_este -= najstarsie['shares']
-                        sklad[ticker].pop(0)
                     else:
                         pomer = predat_este / abs(shares)
                         if splnil_rok: riadok_po_roku += (result * pomer)
                         else:
                             riadok_do_roka += (result * pomer)
                             riadok_vydavok += (predat_este * najstarsie['cena_za_kus'])
-                        najstarsie['shares'] -= predat_este
+                        
+                        zostatok_shares = najstarsie['shares'] - predat_este
+                        sklad[ticker].append({'shares': zostatok_shares, 'date': najstarsie['date'], 'cena_za_kus': najstarsie['cena_za_kus']})
                         predat_este = 0.0
                         
             vysledky_po_rokoch[rok]['zisk_do_roka'] += riadok_do_roka
@@ -138,7 +143,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR S CHROMATICKOU DAŇOVOU TABUĽKOU
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - STABILNÁ VERZIA
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -187,10 +192,3 @@ if uploaded_files:
                     riadky_tabulky.append({
                         "Dátum nákupu": datum_nakupu_str,
                         "Množstvo (ks)": f"{n['shares']:.5f}",
-                        "Daňový stav": "🟢 Bez dane (Nad 1 rok)",
-                        "Dátum oslobodenia": "Už oslobodené",
-                        "Zostáva čakať": "0 dní"
-                    })
-                else:
-                    ks_mlade += n['shares']
-                    dni_cakat = 365 - vek_dni
