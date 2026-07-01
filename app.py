@@ -69,14 +69,14 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v700")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v750")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v700")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v750")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v700")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v750")
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
@@ -117,7 +117,6 @@ if uploaded_files:
                 vydavok_mladeho_balika = 0.0
                 
                 rozpis_textov = []
-                # 🛡️ Pripravíme si zoznam riadkov pre čistý CSV export
                 export_csv_riadky = [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup", "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
                 
                 for n in sklad_aktualny:
@@ -171,5 +170,6 @@ if uploaded_files:
                 st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
                 st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: {zisk_mlade:.2f} EUR | Daň z príjmu (19%): {dan_19:.2f} EUR | Zdravotné odvody (14%): {odvody_14:.2f} EUR | Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR")
                 
-                # 🔓 ROZKLIKÁVACIE OKNO S TEXTAMI A BEZPEČNÝM CSV TLAČIDLOM
+                # 🛡️ 100% STRUKTÚRNE ZAROVNANÝ EXPANDER (ÚPLNE BEZ CHÝB ODSADENIA)
                 with st.expander("📋 Zobraziť detailný rozpis nákupných balíčkov (Frakcií)"):
+                    st.write("Tu nájdete kompletný chronologický zoznam vašich nákupov, z ktorých je poskladaná dnešná otvorená pozícia:")
