@@ -5,7 +5,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 PRO Daňový Asistent & Optimalizátor", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 🎨 FUNKČNÝ PREPÍNAČ PRE DARK MODE (DEFAULT SVETLÝ)
+# 🎨 PREPÍNAČ PRE DARK / LIGHT MODE (DEFAULT SVETLÝ)
 # =========================================================================
 st.sidebar.header("⚙️ Nastavenia vzhľadu")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
@@ -31,7 +31,7 @@ else:
     """, unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny nástroj na kontrolu časového testu pred predajom a automatickú ročnú daňovú uzávierku.")
+st.write("Profesionálny Nástroj na kontrolu časového testu pred predajom a automatickú ročnú daňovú uzávierku.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV súbory (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
 
@@ -44,7 +44,6 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    # Absolútne zaistenie finančných stĺpcov na čisté čísla
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
     df['Result'] = pd.to_numeric(df['Result'], errors='coerce').fillna(0.0)
@@ -79,16 +78,15 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="selectbox_stabilna_v80")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="selectbox_stabilna_v85")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker_pure}, ktorý momentálne vidíte v platforme:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_stabilny_v80")
+            skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker_pure}, ktorý momentálne vidíte v platforme:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_stabilny_v85")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_pro_v80")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_pro_v85")
         
-        # Rekonštrukcia aktuálneho skladu pomocou NEPRIESTRELNEJ lineárnej FIFO logiky
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
         sklad_aktualny = []
@@ -128,15 +126,13 @@ if uploaded_files:
             list_dat_oslobodenia = []
             list_cakania = []
             
-            # Bezpečné lineárne odsekávanie pre optimalizátor - 0% ŠANCA NA ZACYKLENIE
+            # Bezpečné lineárne prechádzanie zoznamu (0% šanca na zacyklenie)
             temp_optimalizator_sklad = [dict(x) for x in sklad_aktualny]
-            while potrebné_ks_check := (potrebne_ks > 1e-5) and len(temp_sklad_check := temp_optimalizator_sklad) > 0:
-                n = temp_optimalizator_sklad[0]
+            for n in temp_optimalizator_sklad:
+                if potrebne_ks < 1e-5:
+                    break
                 vziat_ks = min(n['shares'], potrebne_ks)
                 potrebne_ks -= vziat_ks
-                n['shares'] -= vziat_ks
-                if n['shares'] <= 1e-6:
-                    temp_optimalizator_sklad.pop(0)
                 
                 nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
                 vek_dni = (dnes.date() - nakup_pure.date()).days
@@ -183,3 +179,8 @@ if uploaded_files:
                 "Celkový nákup": list_celkovy_nakup,
                 "Daňový stav": list_stavov,
                 "Dátum oslobodenia": list_dat_oslobodenia,
+                "Zostáva čakať": list_cakania
+            })
+            st.dataframe(tovarna_tabulky, use_container_width=True, hide_index=True)
+            
+            csv_data = tovarna_tabulky.to_csv(index=False).encode('utf-8')
