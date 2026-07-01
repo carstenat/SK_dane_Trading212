@@ -5,7 +5,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 PRO Daňový Asistent & Optimalizátor", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 🎨 PREPÍNAČ PRE DARK / LIGHT MODE (DEFAULT SVETLÝ)
+# 🎨 FUNKČNÝ PREPÍNAČ PRE DARK MODE (DEFAULT SVETLÝ, PRÉMIOVÝ FINTECH)
 # =========================================================================
 st.sidebar.header("⚙️ Nastavenia vzhľadu")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
@@ -13,27 +13,37 @@ dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=Fals
 if dark_mode:
     st.markdown("""
         <style>
-        .stApp { background-color: #121214 !important; color: #E1E1E6 !important; }
-        h1, h2, h3, h4, h5, h6, label, p, span { color: #F4F4F5 !important; }
-        .stTabs [data-baseweb="tab-list"] { background-color: #1A1A1E !important; border-radius: 8px; padding: 5px; }
-        .stTabs [data-baseweb="tab"] { color: #A1A1AA !important; }
-        .stTabs [aria-selected="true"] { color: #38BDF8 !important; font-weight: bold; }
-        div[data-testid="stMetricValue"] { color: #38BDF8 !important; font-weight: bold; }
-        .stDataFrame div { background-color: #1A1A1E !important; color: #E1E1E6 !important; }
+        .stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; font-size: 14px !important; }
+        h1 { font-size: 24px !important; font-weight: 700 !important; color: #FFFFFF !important; margin-bottom: 5px !important; }
+        h2 { font-size: 19px !important; font-weight: 600 !important; color: #F8FAFC !important; margin-top: 15px !important; }
+        h3 { font-size: 16px !important; font-weight: 600 !important; color: #FFFFFF !important; }
+        p, label, span { color: #E2E8F0 !important; }
+        div[data-testid="stMetric"] { background-color: #1E293B !important; border: 2px solid #475569 !important; border-radius: 12px !important; padding: 14px 18px !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
+        div[data-testid="stMetricValue"] { color: #38BDF8 !important; font-size: 22px !important; font-weight: 800 !important; }
+        div[data-testid="stMetricLabel"] { color: #CBD5E1 !important; font-size: 13px !important; font-weight: 600 !important; }
+        .stTabs [data-baseweb="tab-list"] { background-color: #1E293B !important; border: 1px solid #475569 !important; border-radius: 10px; padding: 4px; }
+        .stTabs [aria-selected="true"] { background-color: #0EA5E9 !important; color: #FFFFFF !important; font-weight: 700 !important; }
+        .stDataFrame div { background-color: #111827 !important; color: #F8FAFC !important; border-radius: 8px; }
         </style>
     """, unsafe_allow_html=True)
 else:
     st.markdown("""
         <style>
-        div[data-testid="stMetric"] { background-color: #F8FAFC !important; border: 1px solid #CBD5E1 !important; border-radius: 12px !important; padding: 14px 18px !important; }
-        div[data-testid="stMetricValue"] { color: #0284C7 !important; font-weight: 800 !important; }
+        .stApp { background-color: #FFFFFF !important; color: #1E293B !important; font-size: 14px !important; }
+        h1 { font-size: 24px !important; font-weight: 700 !important; color: #0F172A !important; }
+        h2 { font-size: 19px !important; font-weight: 600 !important; color: #1E293B !important; margin-top: 15px !important; }
+        div[data-testid="stMetric"] { background-color: #F8FAFC !important; border: 2px solid #CBD5E1 !important; border-radius: 12px !important; padding: 14px 18px !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important; }
+        div[data-testid="stMetricValue"] { color: #0284C7 !important; font-size: 22px !important; font-weight: 800 !important; }
+        div[data-testid="stMetricLabel"] { color: #475569 !important; font-size: 13px !important; font-weight: 600 !important; }
+        .stTabs [data-baseweb="tab-list"] { background-color: #F1F5F9 !important; border: 1px solid #CBD5E1 !important; border-radius: 10px; padding: 4px; }
+        .stTabs [aria-selected="true"] { background-color: #0284C7 !important; color: #FFFFFF !important; font-weight: 700 !important; }
         </style>
     """, unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny Nástroj na kontrolu časového testu pred predajom a automatickú ročnú daňovú uzávierku.")
+st.write("Profesionálny nástroj na kontrolu časového testu pred predajom a automatickú ročnú daňovú uzávierku.")
 
-uploaded_files = st.file_uploader("Sem presuňte vaše CSV súbory (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
+uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
 
 if uploaded_files:
     zoznam_df = []
@@ -44,6 +54,7 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
+    # 🛡️ Garantované numerické zaistenie typov proti chybám textov v CSV
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
     df['Result'] = pd.to_numeric(df['Result'], errors='coerce').fillna(0.0)
@@ -60,7 +71,7 @@ if uploaded_files:
                 databaza_mien[tick_c] = full_name
 
     # =========================================================================
-    # 🔥 1. ČASŤ: DAŇOVÝ OPTIMALIZÁTOR PRE DNEŠNÝ PREDAJ (HORE)
+    # 🔥 1. ČASŤ: DAŇOVÝ OPTIMALIZÁTOR SKLADU (100% LINEÁRNE FIFO)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -78,17 +89,18 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="selectbox_stabilna_v85")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v100")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker_pure}, ktorý momentálne vidíte v platforme:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_stabilny_v85")
+            skutocny_stav = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v100")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_pro_v85")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v100")
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
+        # 🛡️ LINEÁRNY PREPOČET SKLADU BEZ WHILE SLUČIEK (0% šanca na zacyklenie)
         sklad_aktualny = []
         for _, riadok in df_ticker.iterrows():
             typ = str(riadok['Action']).lower()
@@ -101,14 +113,12 @@ if uploaded_files:
                     sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
             elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
                 predat_este = abs(shares)
-                while predat_este > 1e-6 and len(sklad_aktualny) > 0:
-                    prvy_balicek = sklad_aktualny[0]
-                    if prvy_balicek['shares'] <= predat_este:
-                        predat_este -= prvy_balicek['shares']
-                        sklad_aktualny.pop(0)
-                    else:
-                        prvy_balicek['shares'] -= predat_este
-                        predat_este = 0.0
+                for balicek in sklad_aktualny:
+                    if predat_este > 1e-6 and balicek['shares'] > 0:
+                        vziat = min(balicek['shares'], predat_este)
+                        balicek['shares'] -= vziat
+                        predat_este -= vziat
+                sklad_aktualny = [x for x in sklad_aktualny if x['shares'] > 1e-6]
         
         if skutocny_stav > 0:
             potrebne_ks = skutocny_stav
@@ -126,9 +136,8 @@ if uploaded_files:
             list_dat_oslobodenia = []
             list_cakania = []
             
-            # Bezpečné lineárne prechádzanie zoznamu (0% šanca na zacyklenie)
-            temp_optimalizator_sklad = [dict(x) for x in sklad_aktualny]
-            for n in temp_optimalizator_sklad:
+            # 🛡️ LINEÁRNE ODSEKÁVANIE PRE OPTIMALIZÁTOR (Čistý for-cyklus bez zacyklenia)
+            for n in sklad_aktualny:
                 if potrebne_ks < 1e-5:
                     break
                 vziat_ks = min(n['shares'], potrebne_ks)
@@ -156,31 +165,4 @@ if uploaded_files:
                     list_dat_oslobodenia.append((nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y'))
                     list_cakania.append(f"⏳ {365 - vek_dni} dní")
             
-            c1, c2 = st.columns(2)
-            
-            if aktualna_cena > 0:
-                trhova_hodnota_safe = ks_bez_dane * aktualna_cena
-                cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
-                c1.metric("Môžete predať IHNEĎ BEZ DANE", f"{ks_bez_dane:.5f} ks", f"Hodnota: {trhova_hodnota_safe:.2f} € (Zisk: +{cisty_zisk_safe:.2f} €)")
-                
-                prijem_mlade = ks_mlade * aktualna_cena
-                zisk_mlade = max(0.0, prijem_mlade - vydavok_mladeho_balika)
-                celkova_hrozba = round((zisk_mlade * 0.19) + (zisk_mlade * 0.14), 2)
-                c2.metric("MLADÉ FRAKCIE (Zdaňujú sa dnes)", f"{ks_mlade:.5f} ks", f"Hrozba štátu: -{celkova_hrozba:.2f} EUR", delta_color="inverse")
-            else:
-                c1.metric("Môžete predať IHNEĎ BEZ DANE", f"{ks_bez_dane:.5f} ks")
-                c2.metric("MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes)", f"{ks_mlade:.5f} ks")
-            
-            st.markdown("### 📋 Detailný rozpis balíčkov na vašom sklade:")
-            tovarna_tabulky = pd.DataFrame({
-                "Dátum nákupu": list_dat_nakupu,
-                "Množstvo (ks)": list_mnozstiev,
-                "Nákupná cena/ks": list_povodna_cena,
-                "Celkový nákup": list_celkovy_nakup,
-                "Daňový stav": list_stavov,
-                "Dátum oslobodenia": list_dat_oslobodenia,
-                "Zostáva čakať": list_cakania
-            })
-            st.dataframe(tovarna_tabulky, use_container_width=True, hide_index=True)
-            
-            csv_data = tovarna_tabulky.to_csv(index=False).encode('utf-8')
+            pomer_safe = ks_bez_dane / skutocny_stav
