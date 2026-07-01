@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-st.set_page_config(page_title="Trading 212 Daňová Kalkukačka", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Trading 212 Daňová Kalkulačka", page_icon="📈", layout="wide")
 
 st.title("📈 Súkromný Daňový Asistent a Optimalizátor pre Trading 212 (SR)")
 st.write("Nahrajte svoje CSV exporty z Trading 212 a získajte ročný daňový manuál + checker pre bezpečný predaj akcií.")
@@ -141,7 +141,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - ÚPLNE PLOCHÁ MATEMATIKA BEZ ODSADENIA
+    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - PLOCHÁ PANDAS LOGIKA (DOKONALE OPRAVENÁ)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -161,11 +161,12 @@ if uploaded_files:
     else:
         ponuka_pre_menu = [f"{t} - {databaza_mien.get(t, 'Spoločnosť')}" for t in zoznam_vsetkych_tickerov]
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
-        vybrany_ticker = vybrany_text.split(" - ")[0]
         
-        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne vlastníte v T212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f")
+        # 💡 OPRAVENÝ LOGICKÝ REZ: Ticker vytiahneme ako čistý textový string na nultej pozícii
+        vybrany_ticker = vybrany_text.split(" - ")[0].strip()
         
-        # 💡 ABSOLÚTNE PLOCHÝ GENERÁTOR (NULOVÁ ŠANCA NA INDENTATION ERROR)
+        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne vlastníte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_bez_formulara_v2")
+        
         df['Ticker_Clean'] = df['Ticker'].str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", ".").str.replace(" ", ".").str.upper()
         df_nakupy = df[(df['Ticker_Clean'] == vybrany_ticker) & (df['Action'].str.lower().str.contains('buy|investment|deposit'))].copy()
         df_nakupy = df_nakupy.sort_values(by='Time').reset_index(drop=True)
@@ -178,7 +179,3 @@ if uploaded_files:
         list_dat_nakupu = []
         list_mnozstiev = []
         list_stavov = []
-        list_dat_oslobodenia = []
-        list_cakania = []
-        
-
