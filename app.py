@@ -23,7 +23,7 @@ if uploaded_files:
     vysledky_po_rokoch = {}
     databaza_mien = {}
     
-    # FIFO logika a spracovanie celej histórie
+    # FIFO logika pre historické ročné reporty
     for _, riadok in df.iterrows():
         typ = str(riadok['Action']).lower()
         ticker_surovy = str(riadok['Ticker'])
@@ -66,7 +66,7 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker][0] # OPRAVENÉ: Berieme prvý nákup (index 0)
+                    najstarsie = sklad[ticker][0]
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
@@ -131,7 +131,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 OPTIMALIZÁTOR - BEZ PRACHU (HODNOTA NAD 5 EUR)
+    # 🔥 MATEMATICKY NEPRIESTRELNÝ OPTIMALIZÁTOR - CELKOVÁ HODNOTA NAD 5 EUR
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -139,9 +139,11 @@ if uploaded_files:
     
     aktivne_tickery = []
     for t in sklad.keys():
-        if len(sklad[t]) > 0:
+        celkovo_ks = sum(n['shares'] for n in sklad[t])
+        # Pozícia musí mať reálny zostatok väčší ako nula a odhadovanú hodnotu aspoň 5 EUR
+        if celkovo_ks > 0.0001:
             odhad_hodnoty = sum(n['shares'] * n['cena_za_kus'] for n in sklad[t])
-            if odhad_hodnoty >= 5.0: # Filtrujeme preč prach pod 5 EUR
+            if odhad_hodnoty >= 5.0:
                 aktivne_tickery.append(t)
                 
     aktivne_tickery = sorted(aktivne_tickery)
