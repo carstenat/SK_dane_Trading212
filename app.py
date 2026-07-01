@@ -68,7 +68,7 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker][0] # OPRAVENÉ: Správne vytiahnutie najstaršieho balíčka zo skladu
+                    najstarsie = sklad[ticker][0]
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
@@ -126,7 +126,7 @@ if uploaded_files:
             if v['zisk_do_roka'] <= 0:
                 st.info(f"Utrpeli ste stratu ({v['zisk_do_roka']:.2f} EUR). Netreba nič vypĺňať.")
             else:
-                if prepočet_ok := (priznany_zisk_po_oslobodeni == 0):
+                if prepocet_ok := (priznany_zisk_po_oslobodeni == 0): # OPRAVENÉ: Vymazaná diakritika z premennej
                     st.info(f"Zisk {v['zisk_do_roka']:.2f} EUR nepresiahol 500 EUR. Je oslobodený.")
                 else:
                     pomer = priznany_zisk_po_oslobodeni / v['zisk_do_roka']
@@ -135,7 +135,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR OVERENÝ SKUTOČNÝM STAVOM Z APLIKÁCIE TRADING 212
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR S CHROMATICKOU TABUĽKOU
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -192,3 +192,4 @@ if uploaded_files:
                         "Zostáva čakať": "0 dní (Voľný predaj)"
                     })
                 else:
+                    ks_mlade += n['shares']
