@@ -142,7 +142,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - 100% BEZ CHÝB SYNTAXE
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - BEZ CHÝB ZO ZÁTVORIEK
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -188,7 +188,7 @@ if uploaded_files:
                 
                 if vek_dni >= 365:
                     ks_bez_dane += n['shares']
+                    # 💡 PLNE OPRAVENÁ SYNTAX ZÁTVORIEK ({ })
                     riadky_tabulky.append({
                         "Dátum nákupu": datum_nakupu_str,
                         "Množstvo (ks)": f"{n['shares']:.5f}",
-                        "Daňový stav": "🟢 Bez dane (Nad 1 rok)",
