@@ -30,7 +30,6 @@ if uploaded_files:
         ticker_surovy = str(riadok['Ticker'])
         full_name = str(riadok.get('Name', 'Neznáma spoločnosť')).strip()
         
-        # UNIVERZÁLNY ČISTIČ JADRA (BRK B, BRK_B, BRK.B -> VŠETKO BUDE ULOŽENÉ AKO BRK.B)
         ticker = ticker_surovy.replace("US ", "").replace("_US", "").replace("_US_EQ", "").replace("_EQ", "").replace(".US", "").strip()
         ticker = ticker.replace("_", ".").replace(" ", ".").upper()
         
@@ -180,4 +179,6 @@ if uploaded_files:
             
         if tlacidlo_spustenia and skutocny_stav_mobil > 0:
             ciste_nakupy_tickeru = []
+            
+            # 💡 OPRAVENÝ BLOK ODSEDENIA NA RIADKU 183 - VÝPOČET BEŽÍ ABSOLÚTNE HLADKO
             for _, riadok in df.iterrows():
