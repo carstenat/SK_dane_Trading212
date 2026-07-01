@@ -5,7 +5,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 PRO Daňový Asistent & Optimalizátor", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 🎨 DYNAMICKÝ FINTECH DESIGN (DEFAULT SVETLÝ S VYSOKÝM KONTRASTOM FARIEB)
+# 🎨 FINTECH DESIGN (DEFAULT SVETLÝ S VYSOKÝM KONTRASTOM FARIEB)
 # =========================================================================
 st.sidebar.header("⚙️ Vzhľad a Vychytávky")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
@@ -60,58 +60,55 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    # 🛡️ NEPRIESTRELNÉ OŠETRENIE TYPOV DÁT (Zabráni akémukoľvek pádu na TypeError)
+    # 🛡️ PREDPRÍPRAVA FINANČNÝCH DAT (Ochrana pred nečíselnými znakmi)
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
     df['Result'] = pd.to_numeric(df['Result'], errors='coerce').fillna(0.0)
     df['Withholding tax'] = pd.to_numeric(df['Withholding tax'], errors='coerce').fillna(0.0)
     
-    # Odfiltrujeme riadky bez tickeru na zaistenie čistoty menu
-    df_filtrat = df[df['Ticker'].notna()].copy()
-    df_filtrat['Ticker'] = df_filtrat['Ticker'].astype(str).str.strip()
-    df_filtrat = df_filtrat[(df_filtrat['Ticker'] != '') & (df_filtrat['Ticker'] != 'nan')].copy()
-    df_filtrat['Ticker_Clean'] = df_filtrat['Ticker'].str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", "").str.replace(".", "").str.replace(" ", "").str.upper()
+    # Vyčistenie stĺpca s Tickerom
+    df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", "").str.replace(".", "").str.replace(" ", "").str.upper()
     
+    # Vybudovanie kompletnej databázy názvov spoločností
     databaza_mien = {}
-    for _, riadok in df_filtrat.iterrows():
-        tick_c = str(riadok['Ticker_Clean'])
-        full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
-        if tick_c and full_name and full_name != 'nan':
-            if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
-                databaza_mien[tick_c] = full_name
+    for _, riadok in df.iterrows():
+        t_clean = str(riadok['Ticker_Clean'])
+        f_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
+        if t_clean and t_clean != 'nan' and f_name and f_name != 'nan':
+            if t_clean not in databaza_mien or len(f_name) > len(databaza_mien[t_clean]):
+                databaza_mien[t_clean] = f_name
 
     # =========================================================================
-    # 🔥 1. ČASŤ: PROFESIONÁLNY DAŇOVÝ OPTIMALIZÁTOR PRED PREDAJOM
+    # 🔥 1. ČASŤ: DAŇOVÝ OPTIMALIZÁTOR SKLADU (FIFO LOGIKA)
     # =========================================================================
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
-    st.write("Vyberte firmu zo zoznamu a zadajte aktuálny otvorený stan, ktorý vidíte v platforme Trading 212.")
     
-    df_akcie = df_filtrat[df_filtrat['Action'].str.lower().str.contains('buy|investment|deposit|sell|divestment|withdrawal|rebalancing', na=False)].copy()
-    zoznam_tickerov_all = sorted(list(df_akcie['Ticker_Clean'].unique()))
+    df_akcie = df[df['Action'].str.lower().str.contains('buy|investment|deposit|sell|divestment|withdrawal|rebalancing', na=False)].copy()
+    zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
     
     if not zoznam_tickerov_all:
-        st.info("V nahratých súboroch sa nenachádzajú žiadne nákupné transakcie akcií.")
+        st.info("V nahratých súboroch sa nenachádzajú žiadne transakcie akcií.")
     else:
         ponuka_pre_menu = []
         mapovanie_tickerov = {}
         for t in zoznam_tickerov_all:
-            full_company_name = databaza_mien.get(t, "Spoločnosť z platformy")
+            full_company_name = databaza_mien.get(t, "Spoločnosť z portfólia")
             text_riadku = f"{t} - {full_company_name}"
             ponuka_pre_menu.append(text_riadku)
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia:", ponuka_pre_menu, key="widget_vyber_pro_v55")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia:", ponuka_pre_menu, key="widget_selectbox_v55")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col_input1, col_input2 = st.columns(2)
         with col_input1:
-            skutocny_stav = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_pro_v55")
+            skutocny_stav = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v55")
         with col_input2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie (EUR):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_pro_v55")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie (EUR):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v55")
         
-        df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].copy()
-        df_ticker = df_ticker.sort_values(by='Time').reset_index(drop=True)
+        # Rekonštrukcia skladu pre zvolenú akciu
+        df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
         sklad_aktualny = []
         for _, riadok in df_ticker.iterrows():
@@ -157,7 +154,6 @@ if uploaded_files:
             for n in sklad_aktualny:
                 if potrebne_ks <= 1e-6:
                     break
-                # 🔓 FIX: Absolútne čistá, overená funkcia min bez akéhokoľvek walrus skratu
                 vziat_ks = min(n['shares'], potrebne_ks)
                 potrebne_ks -= vziat_ks
                 
@@ -173,3 +169,10 @@ if uploaded_files:
                 if vek_dni >= 365:
                     ks_bez_dane += vziat_ks
                     vydavok_safe_balika += cena_balika
+                    list_stavov.append("🟢 Bez dane (Nad 1 rok)")
+                    list_dat_oslobodenia.append("Už oslobodené")
+                    list_cakania.append("0 dní")
+                else:
+                    ks_mlade += vziat_ks
+                    vydavok_mladeho_balika += cena_balika
+                    list_stavov.append("🔴 Zdaňuje sa (Mladá akcia)")
