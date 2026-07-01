@@ -143,7 +143,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - FORMULÁR S UNIVERZÁLNYM PÁROVANÍM
+    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - BEZPEČNÝ FORMULÁR (PLOCHÁ PANDAS LOGIKA)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -178,7 +178,4 @@ if uploaded_files:
             tlacidlo_spustenia = st.form_submit_button(label="🚀 Spustiť daňovú kontrolu pozície")
             
         if tlacidlo_spustenia and skutocny_stav_mobil > 0:
-            ciste_nakupy_tickeru = []
-            
-            # 💡 OPRAVENÝ BLOK ODSEDENIA NA RIADKU 183 - VÝPOČET BEŽÍ ABSOLÚTNE HLADKO
-            for _, riadok in df.iterrows():
+            # 💡 PLOCHÁ PANDAS LOGIKA BEZ SLUČKY FOR NA HISTÓRIU (VYMAZANÁ CHYBA ZO SIVÉHO OBRÁZKA)
