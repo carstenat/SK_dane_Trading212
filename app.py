@@ -1,12 +1,11 @@
 import streamlit as st
 import pandas as pd
-import io
 from datetime import datetime
 
 st.set_page_config(page_title="Trading 212 Daňová Kalkulačka", page_icon="📈", layout="wide")
 
 st.title("📈 Súkromný Daňový Asistent a Optimalizátor pre Trading 212 (SR)")
-st.write("Nahrajte svoje CSV exporty z Trading 212 a získajte ročný daňový manuál + checker pre safe predaj akcií.")
+st.write("Nahrajte svoje CSV exporty z Trading 212 a získajte ročný daňový manuál + checker pre bezpečný predaj akcií.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV súbory (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
 
@@ -23,7 +22,9 @@ if uploaded_files:
     vysledky_po_rokoch = {}
     databaza_mien = {}
     
-    # 1. KROK: HISTORICKÁ FIFO MATEMATIKA PRE DANÉ ROKY
+    # =========================================================================
+    # 1. KROK: ČISTÁ HISTORICKÁ FIFO MATEMATIKA PRE DANÉ ROKY
+    # =========================================================================
     for _, riadok in df.iterrows():
         typ = str(riadok['Action']).lower()
         ticker_surovy = str(riadok['Ticker'])
@@ -53,11 +54,13 @@ if uploaded_files:
             vysledky_po_rokoch[rok]['div_dan'] += tax
             continue
             
+        # Ignorujeme drobné splitové anomálie brokera
         if ('sell' in typ or 'divestment' in typ or 'withdrawal' in typ) and abs(result) < 2.0 and total < 10.0:
             continue
             
         if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
-            if ticker not in sklad: sklad[ticker] = []
+            if ticker not in sklad: 
+                sklad[ticker] = []
             sklad[ticker].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares if shares > 0 else 0.0})
             
         elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
@@ -67,33 +70,30 @@ if uploaded_files:
             riadok_vydavok = 0.0
             
             if ticker in sklad and sklad[ticker]:
-                temp_sklad = list(sklad[ticker])
-                sklad[ticker] = []
-                
-                for najstarsie in temp_sklad:
-                    if predat_este <= 0:
-                        sklad[ticker].append(najstarsie)
-                        continue
-                        
+                # BEZPEČNÁ FIFO SLUČKA S OCHRANOU PROTI MIKRO-ZOSTATKOM (1e-6)
+                while predat_este > 1e-6 and sklad[ticker]:
+                    najstarsie = sklad[ticker][0]
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
                     if najstarsie['shares'] <= predat_este:
                         pomer = najstarsie['shares'] / abs(shares)
-                        if splnil_rok: riadok_po_roku += (result * pomer)
+                        if splnil_rok: 
+                            riadok_po_roku += (result * pomer)
                         else:
                             riadok_do_roka += (result * pomer)
                             riadok_vydavok += (najstarsie['shares'] * najstarsie['cena_za_kus'])
                         predat_este -= najstarsie['shares']
+                        sklad[ticker].pop(0)
                     else:
                         pomer = predat_este / abs(shares)
-                        if splnil_rok: riadok_po_roku += (result * pomer)
+                        if splnil_rok: 
+                            riadok_po_roku += (result * pomer)
                         else:
                             riadok_do_roka += (result * pomer)
                             riadok_vydavok += (predat_este * najstarsie['cena_za_kus'])
                         
-                        zostatok_shares = najstarsie['shares'] - predat_este
-                        sklad[ticker].append({'shares': zostatok_shares, 'date': najstarsie['date'], 'cena_za_kus': najstarsie['cena_za_kus']})
+                        najstarsie['shares'] -= predat_este
                         predat_este = 0.0
                         
             vysledky_po_rokoch[rok]['zisk_do_roka'] += riadok_do_roka
@@ -102,9 +102,9 @@ if uploaded_files:
                 vysledky_po_rokoch[rok]['prijmy_kratkodobe'] += total
                 vysledky_po_rokoch[rok]['vydavky_kratkodobe'] += riadok_vydavok
 
-    st.success("🚀 Analýza úspešne dokončená!")
+    st.success("🚀 Analýza histories úspešne dokončená!")
     
-    # ROČNÉ PREHĽADY
+    # ROČNÉ PREHĽADY HORE
     roky_zoznam = sorted(list(vysledky_po_rokoch.keys()), reverse=True)
     moje_tabs = st.tabs([f"📅 Rok {r}" for r in roky_zoznam])
     
@@ -142,52 +142,48 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR S CHROMATICKOU DAŇOVOU TABUĽKOU
+    # 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - IZOLOVANÝ A PLOCHÝ TOK DÁT
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
-    st.write("Aplikácia analyzovala históriu nákupov. Pre zaručenie 100% presnosti zadajte váš aktuálny otvorený stav z platformy Trading 212.")
+    st.write("Aplikácia analyzovala históriu nákupov. Vyberte firmu a zadajte váš aktuálny otvorený stav z platformy Trading 212.")
     
-    vsetky_tickery = sorted(list(sklad.keys()))
+    # Zobrazíme iba tie tickery, ktoré majú v pamäti reálny zostatok nákupov nad 0.01 ks
+    aktivne_tickery = []
+    for t in sklad.keys():
+        zostatok_na_skladu = sum(item['shares'] for item in sklad[t])
+        if zostatok_na_skladu >= 0.01:
+            aktivne_tickery.append(t)
+            
+    aktivne_tickery = sorted(aktivne_tickery)
     
-    if vsetky_tickery:
+    if not aktivne_tickery:
+        st.info("Vo vašej histórii momentálne nezostali žiadne otvorené pozície akcií (všetko je reálne predané).")
+    else:
         ponuka_pre_menu = []
         mapovanie = {}
-        for t in vsetky_tickery:
-            text_polozky = f"{t} - {databaza_mien.get(t, 'Spoločnosť z CSV')}"
+        for t in aktivne_tickery:
+            text_polozky = f"{t} - {databaza_mien.get(t, 'Spoločnosť z platformy')}"
             ponuka_pre_menu.append(text_polozky)
             mapovanie[text_polozky] = t
             
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         vybrany_ticker = mapovanie[vybrany_text]
         
-        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne SKUTOČNE vidíte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_t212_vFINAL_DVE")
+        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne vidíte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_autenticky_t212")
         
         if skutocny_stav_mobil > 0:
-            nákupy_vsetky = sklad.get(vybrany_ticker, [])
+            # Zoberieme čistú, hlbokú kópiu aktuálneho stavu skladu pre vybranú akciu
+            nákupy_vsetky = []
+            for item in sklad[vybrany_ticker]:
+                nákupy_vsetky.append({'shares': item['shares'], 'date': item['date']})
+                
+            nákupy_vsetky = sorted(nákupy_vsetky, key=lambda x: x['date'])
+            nákupy_skutocne = []
+            potrebne_ks = skutocny_stav_mobil
             
-            if not nákupy_vsetky:
-                st.info("V histórii nákupov pre tento ticker neboli nájdené žiadne otvorené balíčky.")
-            else:
-                nákupy_vsetky = sorted(nákupy_vsetky, key=lambda x: x['date'])
-                nákupy_skutocne = []
-                potrebne_ks = skutocny_stav_mobil
-                
-                for n in nákupy_vsetky:
-                    if potrebne_ks <= 0:
-                        break
-                    vziat_ks = min(n['shares'], potrebne_ks)
-                    nákupy_skutocne.append({'shares': vziat_ks, 'date': n['date']})
-                    potrebne_ks -= vziat_ks
-                
-                dnes = datetime.now()
-                ks_bez_dane = 0.0
-                ks_mlade = 0.0
-                list_dat_nakupu = []
-                list_mnozstiev = []
-                list_stavov = []
-                list_dat_oslobodenia = []
-                list_cakania = []
-                
-                for n in nákupy_skutocne:
-                    nakup_pure = pd.to_datetime(n['date']).to_pydatetime() if hasattr(n['date'], 'to_pydatetime') else n['date']
+            # Vyberieme presne chronologické balíčky do výšky zadaného stavu
+            for n in nákupy_vsetky:
+                if potrebne_ks <= 0:
+                    break
+                vziat_ks = min(n['shares'], ... if False else potrebne_ks)
