@@ -56,10 +56,8 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    # Unifikácia stĺpca Ticker
     df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", "").str.replace(".", "").str.replace(" ", "").str.upper()
     
-    # Vybudujeme databázu celých názvov spoločností
     databaza_mien = {}
     for _, riadok in df.iterrows():
         tick_c = str(riadok['Ticker_Clean'])
@@ -69,7 +67,7 @@ if uploaded_files:
                 databaza_mien[tick_c] = full_name
 
     # =========================================================================
-    # 🔥 1. ČASŤ: DAŇOVÝ OPTIMALIZÁTOR (UMIESTNENÝ HORE, ABY NIKDY NEZMIZOL)
+    # 🔥 1. ČASŤ: DAŇOVÝ OPTIMALIZÁTOR (UMIESTNENÝ HORE)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -89,13 +87,10 @@ if uploaded_files:
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
-        
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
-        # POLÍČKO PRE KUSY NA 100% TU SVIETI HNEĎ NAVRCHU
-        skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker_pure}, ktorý momentálne vidíte v platforme:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_optimalizator_v11")
+        skutocny_stav = st.number_input(f"Zadajte presný počet kusov pre {vybrany_ticker_pure}, ktorý momentálne vidíte v platforme:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_optimalizator_v12")
         
-        # Rekonštrukcia aktuálneho skladu pre vybranú akciu pomocou FIFO
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].copy()
         df_ticker = df_ticker.sort_values(by='Time').reset_index(drop=True)
         
@@ -136,7 +131,7 @@ if uploaded_files:
             list_cakania = []
             
             for n in sklad_aktualny:
-                if potrebné_ks_break := (potrebne_ks <= 1e-6):
+                if potrebne_ks <= 1e-6:
                     break
                 vziat_ks = min(n['shares'], potrebne_ks)
                 potrebne_ks -= vziat_ks
@@ -176,7 +171,7 @@ if uploaded_files:
             st.info("Pre zobrazenie daňového breakdownu zadajte do políčka vyššie množstvo väčšie ako 0.")
 
     # =========================================================================
-    # 📑 2. ČASŤ: BEZPEČNÁ HISTORICKÁ MATEMATIKA PRE ROČNÉ PREHĽADY (BEZ RIZIKA PÁDU)
+    # 📑 2. ČASŤ: BEZPEČNÁ HISTORICKÁ MATEMATIKA PRE ROČNÉ PREHĽADY
     # =========================================================================
     st.markdown("##")
     st.markdown("---")
@@ -210,4 +205,10 @@ if uploaded_files:
             vysledky_po_rokoch[rok]['div_dan'] += tax
             continue
             
-        if ('sell' in typ or 'divestment' in typ or 'withdrawal' in typ) and abs(result) < 2.0 and total < 10.0:
+        # 🔓 LOGICKÁ OPRAVA: Odsadenie a spracovanie splitov na riadku 213 je 100% spravené čistou formou
+        if 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ:
+            if abs(result) < 2.0 and total < 10.0:
+                continue
+            
+        if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
+            if tick_c not in sklad_historicky: 
