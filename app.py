@@ -133,11 +133,11 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR OVERENÝ SKUTOČNÝM STAVOM Z MOBILU
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR OVERENÝ STAVOM Z APLIKÁCIE TRADING 212
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
-    st.write("Aplikácia analyzovala históriu nákupov. Pre zaručenie 100% presnosti zadajte váš aktuálny stav z mobilnej aplikácie.")
+    st.write("Aplikácia analyzovala históriu nákupov. Pre zaručenie 100% presnosti zadajte váš aktuálny otvorený stav z platformy Trading 212.")
     
     vsetky_tickery = sorted(list(sklad.keys()))
     
@@ -149,10 +149,11 @@ if uploaded_files:
             ponuka_pre_menu.append(text_polozky)
             mapovanie[text_polozky] = t
             
-        vybrany_text = st.selectbox("Vyberte akciu z vášho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         vybrany_ticker = mapovanie[vybrany_text]
         
-        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne SKUTOČNE vidíte v aplikácii v mobile:", min_value=0.0, value=0.0, step=0.00001, format="%.5f")
+        # OPRAVENÝ UNIVERZÁLNY TEXT (MOBIL -> APLIKÁCIA TRADING 212)
+        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne SKUTOČNE vidíte v aplikácii Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f")
         
         if skutocny_stav_mobil > 0:
             nákupy_vsetky = sklad[vybrany_ticker]
@@ -168,7 +169,7 @@ if uploaded_files:
                     nákupy_skutocne.append(n)
                     potrebne_ks -= n['shares']
                 else:
-                    nákupy_skutocne.append({'shares': potrebné_ks, 'date': n['date']})
+                    nákupy_skutocne.append({'shares': potrebne_ks, 'date': n['date']})
                     potrebne_ks = 0.0
             
             dnes = datetime.now()
