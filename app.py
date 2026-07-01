@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import re
 
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
@@ -71,21 +70,15 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v500")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v600")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v500")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v600")
         with col2:
-            vstup_cena_text = st.text_input("Aktuálna trhová cena akcie v EUR (voliteľné):", value="0.00", key="vstup_cena_v500")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v600")
         
-        cistá_cena_text = re.sub(r'[^\d.]', '', vstup_cena_text.replace(',', '.'))
-        try:
-            aktualna_cena = float(cistá_cena_text) if cistá_cena_text else 0.0
-        except:
-            aktualna_cena = 0.0
-            
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
         sklad_aktualny = []
@@ -111,7 +104,7 @@ if uploaded_files:
         
         if vstup_vlastnene > 0:
             if vstup_vlastnene > max_sklad_dostupny:
-                st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}.")
+                st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom reálnom sklade Trading 212 zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame na vaše reálne maximum.")
                 skutocny_stav = max_sklad_dostupny
             else:
                 skutocny_stav = vstup_vlastnene
@@ -171,7 +164,7 @@ if uploaded_files:
                 cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
                 st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
                 
-                # 🔒 2. ORANŽOVO-ŽLTÁ VÝSTRAHA (ABSOLÚTNE NAROVNANÁ A ZAVRETÁ)
+                # 🔒 2. ORANŽOVO-ŽLTÁ VÝSTRAHA (ZÁVÄZNE UZAVRETÉ ZÁTVORKY A SYNTAX)
                 trhova_hodnota_mlade = ks_mlade * aktualna_cena
                 zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
                 dan_19 = round(zisk_mlade * 0.19, 2)
@@ -190,3 +183,5 @@ if uploaded_files:
                     "Celkový nákup": list_celkovy_nakup,
                     "Daňový stav": list_stavov,
                     "Dátum oslobodenia": list_dat_oslobodenia,
+                    "Zostáva čakať": list_cakania
+                })
