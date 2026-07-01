@@ -135,7 +135,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: 100% BEZPEČNÝ OPTIMALIZÁTOR S CYKLOM FOR (NIKDY NEZAMRZNE)
+    # 🔥 2. KROK: 100% BEZPEČNÝ OPTIMALIZÁTOR (S KREKTNÝM PRÍKAZOM BREAK)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -163,10 +163,9 @@ if uploaded_files:
             nákupy_skutocne = []
             potrebne_ks = skutocny_stav_mobil
             
-            # PURE FLOV LOGIKA (BEZ SLUČKY WHILE) - PREBEHNE BEZPEČNE IBA RAZ
             for n in nákupy_vsetky:
                 if potrebne_ks <= 0:
-                    continue
+                    break # OPRAVENÉ: Príkaz break okamžite a bleskovo zastaví cyklus, ak máme kusy splnené
                 vziat_ks = min(n['shares'], potrebne_ks)
                 nákupy_skutocne.append({'shares': vziat_ks, 'date': n['date']})
                 potrebne_ks -= vziat_ks
