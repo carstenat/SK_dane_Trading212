@@ -134,7 +134,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR - PREPÍNAČ NA SKRYTIE STARÝCH OPERÁCIÍ
+    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR - BEZ CHYBNÝCH BLOKOV
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -145,19 +145,16 @@ if uploaded_files:
     aktivne_tickery = []
     for t in sklad.keys():
         celkovo_ks = sum(n['shares'] for n in sklad[t])
-        if skryt_stare:
-            if celkovo_ks >= 0.01:
-                aktivne_tickery.append(t)
-        else:
-            if celkovo_ks > 0.0001:
-                aktivne_tickery.append(t)
+        if skryt_stare and celkovo_ks >= 0.01:
+            aktivne_tickery.append(t)
+        elif not skryt_stare and celkovo_ks > 0.0001:
+            aktivne_tickery.append(t)
                 
     aktivne_tickery = sorted(aktivne_tickery)
     
     if aktivne_tickery:
         ponuka_pre_menu = []
         mapovanie = {}
-        
         for t in aktivne_tickery:
             plne_meno = databaza_mien.get(t, "Spoločnosť z CSV")
             text_polozky = f"{t} - {plne_meno}"
@@ -170,7 +167,6 @@ if uploaded_files:
             vybrany_ticker = mapovanie[vybrany_text]
             st.subheader(f"📊 Analýza pozície: {vybrany_text}")
             nákupy = sklad[vybrany_ticker]
-            
             celkovo_vlastnene = sum(n['shares'] for n in nákupy)
             st.write(f"Aktuálne reálne vlastníte: **{celkovo_vlastnene:.5f} ks**.")
             
@@ -186,11 +182,7 @@ if uploaded_files:
                 else:
                     ks_mlade += n['shares']
                     dni_do_roka = 365 - vek_dni
-                    podrobnosti_mlade.append({
-                        'shares': n['shares'],
-                        'date': n['date'].strftime('%d.%m.%Y'),
-                        'dni_cakat': dni_do_roka
-                    })
+                    podrobnosti_mlade.append({'shares': n['shares'], 'date': n['date'].strftime('%d.%m.%Y'), 'dni_cakat': dni_do_roka})
             
             c1, c2 = st.columns(2)
             c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**")
@@ -202,3 +194,4 @@ if uploaded_files:
                 for pm in podrobnosti_mlade:
                     st.write(f"• Fragment o veľkosti **{pm['shares']:.5f} ks** (nakúpený {pm['date']}) bude oslobodený o **{pm['dni_cakat']} dní**.")
     else:
+        st.info("Vo vašej histórii momentálne nezostali žiadne otvorené pozície akcií (všetko je predané).")
