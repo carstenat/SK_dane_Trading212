@@ -67,7 +67,6 @@ if uploaded_files:
             riadok_vydavok = 0.0
             
             if ticker in sklad and sklad[ticker]:
-                # BEZPEČNÝ CHROMATICKÝ SKOK (NULOVÉ RIZIKO ZACYKLENIA)
                 temp_sklad = list(sklad[ticker])
                 sklad[ticker] = []
                 
@@ -143,7 +142,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - STABILNÁ VERZIA
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - 100% BEZ CHÝB SYNTAXE
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -192,3 +191,4 @@ if uploaded_files:
                     riadky_tabulky.append({
                         "Dátum nákupu": datum_nakupu_str,
                         "Množstvo (ks)": f"{n['shares']:.5f}",
+                        "Daňový stav": "🟢 Bez dane (Nad 1 rok)",
