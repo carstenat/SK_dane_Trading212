@@ -68,7 +68,7 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker]
+                    najstarsie = sklad[ticker][0]
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
@@ -124,7 +124,7 @@ if uploaded_files:
             if v['zisk_do_roka'] <= 0:
                 st.info(f"Utrpeli ste stratu ({v['zisk_do_roka']:.2f} EUR). Netreba nič vypĺňať.")
             else:
-                if prepočet_ok := {priznany_zisk_po_oslobodeni == 0}:
+                if prepočet_ok := (priznany_zisk_po_oslobodeni == 0):
                     st.info(f"Zisk {v['zisk_do_roka']:.2f} EUR nepresiahol 500 EUR. Je oslobodený.")
                 else:
                     pomer = priznany_zisk_po_oslobodeni / v['zisk_do_roka']
@@ -137,7 +137,7 @@ if uploaded_files:
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
-    st.write(f"Aplikácia analyzovala históriu nákupov. Pre zaručenie 100% presnosti zadajte váš aktuálny stav z mobilnej aplikácie.")
+    st.write("Aplikácia analyzovala históriu nákupov. Pre zaručenie 100% presnosti zadajte váš aktuálny stav z mobilnej aplikácie.")
     
     vsetky_tickery = sorted(list(sklad.keys()))
     
@@ -152,15 +152,12 @@ if uploaded_files:
         vybrany_text = st.selectbox("Vyberte akciu z vášho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         vybrany_ticker = mapovanie[vybrany_text]
         
-        # 💡 POUŽÍVATEĽ ZADÁVA ČISTÚ PRAVDU Z MOBILU
         skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne SKUTOČNE vidíte v aplikácii v mobile:", min_value=0.0, value=0.0, step=0.00001, format="%.5f")
         
         if skutocny_stav_mobil > 0:
             nákupy_vsetky = sklad[vybrany_ticker]
-            # Zoradíme nákupy chronologicky (od najstarších), aby sme uplatnili FIFO pravidlo
             nákupy_vsetky = sorted(nákupy_vsetky, key=lambda x: x['date'])
             
-            # Zoberieme presne toľko kusov z najstarších nákupov, koľko reálne drží v mobile
             nákupy_skutocne = []
             potrebne_ks = skutocny_stav_mobil
             
@@ -171,13 +168,12 @@ if uploaded_files:
                     nákupy_skutocne.append(n)
                     potrebne_ks -= n['shares']
                 else:
-                    nákupy_skutocne.append({'shares': potrebne_ks, 'date': n['date']})
+                    nákupy_skutocne.append({'shares': potrebné_ks, 'date': n['date']})
                     potrebne_ks = 0.0
             
             dnes = datetime.now()
             ks_bez_dane = 0.0
             ks_mlade = 0.0
-            podrobnosti_mlade = []
             
             for n in nákupy_skutocne:
                 vek_dni = (dnes - n['date'].to_pydatetime()).days if hasattr(n['date'], 'to_pydatetime') else (dnes - n['date']).days
@@ -185,12 +181,9 @@ if uploaded_files:
                     ks_bez_dane += n['shares']
                 else:
                     ks_mlade += n['shares']
-                    podrobnosti_mlade.append({'shares': n['shares'], 'date': n['date'].strftime('%d.%m.%Y'), 'dni': 365 - vek_dni})
             
             c1, c2 = st.columns(2)
             c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**")
             c2.warning(f"🔒 MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes):\n**{ks_mlade:.5f} ks**")
-            
-            if ks_mlade > 0:
-                st.markdown("### 📅 Kedy predáte zvyšok bez dane?")
-                for pm in podrobnosti_mlade:
+        else:
+            st.info("Pre zobrazenie daňového breakdownu zadajte do políčka vyššie množstvo väčšie ako 0.")
