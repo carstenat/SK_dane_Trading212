@@ -68,7 +68,7 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker][0] # OPRAVENÉ: Pridaný chýbajúci index prvej najstaršej pozície
+                    najstarsie = sklad[ticker][0] # OPRAVENÉ: Správne vytiahnutie najstaršieho balíčka zo skladu
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
@@ -135,7 +135,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR OVERENÝ SKUTOČNÝM STAVOM Z APLIKÁCIE TRADING 212
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR OVERENÝ SKUTOČNÝM STAVOM Z APLIKÁCIE TRADING 212
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
