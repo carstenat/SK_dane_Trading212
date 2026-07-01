@@ -53,17 +53,17 @@ if uploaded_files:
             vysledky_po_rokoch[rok]['div_dan'] += tax
             continue
             
-        # AKCIA S KUSMI (Ignorujeme drobné splitové korekcie brokera)
+        # AKCIA S KUSMI (Ošetrenie technických chýb)
         if shares != 0:
-            if (typ.contains('sell') or typ.contains('divestment') or shares < 0) and abs(result) < 2.0 and total < 10.0:
+            if ('sell' in typ or 'divestment' in typ or shares < 0) and abs(result) < 2.0 and total < 10.0:
                 continue
                 
-            # ABSOLÚTNA LOGIKA: KLADNÉ ČÍSLO JE NÁKUP
+            # ABSOLÚTNA LOGIKA NÁKUPU: Kladné kusy a overený nákupný text
             if shares > 0 and ('buy' in typ or 'investment' in typ or 'deposit' in typ or 'received' in typ):
                 if ticker not in sklad: sklad[ticker] = []
                 sklad[ticker].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares if shares > 0 else 0.0})
                 
-            # ABSOLÚTNA LOGIKA: ZÁPORNÉ ČÍSLO ALEBO "SELL/DIVESTMENT/WITHDRAWAL" JE PREDAJ
+            # ABSOLÚTNA LOGIKA PREDAJU: Záporné kusy alebo predajné texty (Withdrawal, Rebalancing...)
             elif shares < 0 or 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ:
                 predat_este = abs(shares)
                 riadok_po_roku = 0.0
@@ -128,7 +128,7 @@ if uploaded_files:
             if v['zisk_do_roka'] <= 0:
                 st.info(f"Utrpeli ste stratu ({v['zisk_do_roka']:.2f} EUR). Netreba nič vypĺňať.")
             else:
-                if Docs := priznany_zisk_po_oslobodeni == 0:
+                if priznany_zisk_po_oslobodeni == 0:
                     st.info(f"Zisk {v['zisk_do_roka']:.2f} EUR nepresiahol 500 EUR. Je oslobodený.")
                 else:
                     pomer = priznany_zisk_po_oslobodeni / v['zisk_do_roka']
@@ -137,7 +137,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 FINÁLNY DYNAMICKÝ OPTIMALIZÁTOR - BEZ CHÝB S ABSOLÚTNYMI KUSMI
+    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR - PREPÍNAČ NA SKRYTIE STARÝCH OPERÁCIÍ
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
