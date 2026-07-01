@@ -91,7 +91,7 @@ if uploaded_files:
                         if splnil_rok: riadok_po_roku += (result * pomer)
                         else:
                             riadok_do_roka += (result * pomer)
-                            riadok_vydavok += (predat_este * r_nakup['cena_za_kus'] if 'r_nakup' in locals() else predat_este * najstarsie['cena_za_kus'])
+                            riadok_vydavok += (predat_este * najstarsie['cena_za_kus'])
                         
                         zostatok_shares = najstarsie['shares'] - predat_este
                         sklad_historicky[ticker].append({'shares': zostatok_shares, 'date': najstarsie['date'], 'cena_za_kus': najstarsie['cena_za_kus']})
@@ -162,10 +162,10 @@ if uploaded_files:
         ponuka_pre_menu = [f"{t} - {databaza_mien.get(t, 'Spoločnosť')}" for t in zoznam_vsetkych_tickerov]
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         
-        # 🔓 DOKONALÁ OPRAVA INDEXU: Ticker vytiahneme ako textový string z nultej pozície
+        # 🔓 LOGICKÁ OPRAVA: Pridaný index [0] pred strip(), čím sa odstránil AttributeError a biele mrznutie webu!
         vybrany_ticker = vybrany_text.split(" - ")[0].strip()
         
-        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne reálne vlastníte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_bez_formulara_v3")
+        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne vlastníte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_bez_formulara_v4")
         
         df['Ticker_Clean'] = df['Ticker'].str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", ".").str.replace(" ", ".").str.upper()
         df_nakupy = df[(df['Ticker_Clean'] == vybrany_ticker) & (df['Action'].str.lower().str.contains('buy|investment|deposit'))].copy()
@@ -176,3 +176,6 @@ if uploaded_files:
         ks_bez_dane = 0.0
         ks_mlade = 0.0
         
+        list_dat_nakupu = []
+        list_mnozstiev = []
+
