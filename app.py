@@ -39,18 +39,15 @@ if uploaded_files:
         
     df = pd.concat(zoznam_df, ignore_index=True)
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
-    df = df.dropna(subset=['Time', 'Ticker']).sort_values(by='Time').reset_index(drop=True)
+    df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
-    df['Withholding tax'] = pd.to_numeric(df['Withholding tax'], errors='coerce').fillna(0.0)
-    
-    # Vyčistenie a normalizácia surového tickeru z platformy
     df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
     
     databaza_mien = {}
     for _, riadok in df.iterrows():
-        tick_c = str(riadok['Ticker_Clean']).split('_')[0].split('.')[0]  # Orežeme Burzové prípony pre menu
+        tick_c = str(riadok['Ticker_Clean'])
         full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
         if tick_c and tick_c != 'nan' and full_name and full_name != 'nan':
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
@@ -59,11 +56,8 @@ if uploaded_files:
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     
-    df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)].copy()
-    
-    # Zostavíme ponuku čistých tickerov bez burzových prípon typu _EE alebo .DE
-    df_akcie['Ticker_Pure_Group'] = df_akcie['Ticker_Clean'].apply(lambda x: x.split('_')[0].split('.')[0])
-    zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Pure_Group'].unique() if x and x != 'nan' and x != ''])
+    df_akcie = df[df['Action'].str.lower().str.contains('buy|investment|deposit|sell|divestment|withdrawal|rebalancing', na=False)].copy()
+    zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
     
     if zoznam_tickerov_all:
         ponuka_pre_menu = []
@@ -75,17 +69,16 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v985")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v999")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v985")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v999")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v985")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v999")
         
-        # 🛡️ UNIVERZÁLNY PÁROVACÍ ENGINE: Schmatne ASML, ASML_EE aj ASML.DE naraz bez kolapsu
-        df_ticker = df_akcie[df_akcie['Ticker_Pure_Group'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
+        df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
         sklad_aktualny = []
         for _, riadok in df_ticker.iterrows():
@@ -94,10 +87,10 @@ if uploaded_files:
             total = float(riadok['Total'])
             datum = riadok['Time']
             
-            if 'buy' in typ or 'nákup' in typ or 'nakup' in typ:
+            if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
                 if shares > 0.00001:
                     sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
-            elif 'sell' in typ or 'predaj' in typ or shares < 0:
+            elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
                 predat_este = abs(shares)
                 for b in sklad_aktualny:
                     if predat_este > 1e-6 and b['shares'] > 0:
@@ -110,7 +103,7 @@ if uploaded_files:
         
         if vstup_vlastnene > 0:
             if vstup_vlastnene > max_sklad_dostupny:
-                st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade Trading 212 zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame na vaše reálne maximum.")
+                st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom reálnom sklade Trading 212 zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame na vaše reálne maximum.")
                 skutocny_stav = max_sklad_dostupny
             else:
                 skutocny_stav = vstup_vlastnene
@@ -124,7 +117,6 @@ if uploaded_files:
                 vydavok_mladeho_balika = 0.0
                 
                 rozpis_textov = []
-                export_csv_riadky = [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup", "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
                 
                 for n in sklad_aktualny:
                     if potrebne_ks < 1e-5:
@@ -146,7 +138,6 @@ if uploaded_files:
                         vydavok_safe_balika += cena_balika
                         riadok_prehladu = f"🟢 **BEZ DANE** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Netreba čakať (Oslobodené)"
                         rozpis_textov.append(riadok_prehladu)
-                        export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Bez dane", "Uz oslobodene", "0 dni"])
                     else:
                         ks_mlade += vziat_ks
                         vydavok_mladeho_balika += cena_balika
@@ -154,7 +145,6 @@ if uploaded_files:
                         zostava_dni = 365 - vek_dni
                         riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
                         rozpis_textov.append(riadok_prehladu)
-                        export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Zdanuje sa", d_oslobodenia, f"{zostava_dni} dni"])
                 
                 ks_bez_dane = round(ks_bez_dane, 5)
                 ks_mlade = round(ks_mlade, 5)
@@ -175,3 +165,12 @@ if uploaded_files:
                 celkovy_vypal_statu = dan_19 + odvody_14
                 
                 st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
+                st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: {zisk_mlade:.2f} EUR | Daň z príjmu (19%): {dan_19:.2f} EUR | Zdravotné odvody (14%): {odvody_14:.2f} EUR | Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR")
+                
+                # 🛡️ 100% STRUKTÚRNE PLOCHÝ EXPANDER ( checkpoint )
+                with st.expander("📋 Zobraziť detailný rozpis nákupných balíčkov (Frakcií)"):
+                    st.write("Tu nájdete kompletný chronologický zoznam vašich nákupov, z ktorých je poskladaná dnešná otvorená pozícia:")
+                    for r_text in rozpis_textov:
+                        st.write(r_text)
+        else:
+            st.info("Pre zobrazenie daňového breakdownu zadajte do políčka vyššie množstvo väčšie ako 0.")
