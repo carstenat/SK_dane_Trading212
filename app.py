@@ -142,7 +142,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - BEZ CHÝB ZO ZÁTVORIEK
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - BEZ NEBEZPEČNEJ SYNTAXE SÚPISIEK
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -180,15 +180,18 @@ if uploaded_files:
             dnes = datetime.now()
             ks_bez_dane = 0.0
             ks_mlade = 0.0
-            riadky_tabulky = []
+            
+            # ÚPLNE VYČISTENÝ PLOCHÝ ZOZNAM (BEZ KUČERAVÝCH ZÁTVORIEK VAPPENDOCH)
+            list_dat_nakupu = []
+            list_mnozstiev = []
+            list_stavov = []
+            list_dat_oslobodenia = []
+            list_cakania = []
             
             for n in nákupy_skutocne:
                 vek_dni = (dnes - n['date'].to_pydatetime()).days if hasattr(n['date'], 'to_pydatetime') else (dnes - n['date']).days
                 datum_nakupu_str = n['date'].strftime('%d.%m.%Y')
                 
-                if vek_dni >= 365:
-                    ks_bez_dane += n['shares']
-                    # 💡 PLNE OPRAVENÁ SYNTAX ZÁTVORIEK ({ })
-                    riadky_tabulky.append({
-                        "Dátum nákupu": datum_nakupu_str,
-                        "Množstvo (ks)": f"{n['shares']:.5f}",
+                list_dat_nakupu.append(datum_nakupu_str)
+                list_mnozstiev.append(f"{n['shares']:.5f}")
+                
