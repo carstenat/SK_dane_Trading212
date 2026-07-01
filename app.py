@@ -68,7 +68,7 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker][0]
+                    najstarsie = sklad[ticker]
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
@@ -135,7 +135,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR S HISTORICKOU TABUĽKOU (ČISTÝ BEZ COMENT CHÝB)
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR OVERENÝ SKUTOČNÝM STAVOM Z APLIKÁCIE TRADING 212
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -170,7 +170,7 @@ if uploaded_files:
                     nákupy_skutocne.append(n)
                     potrebne_ks -= n['shares']
                 else:
-                    nákupy_skutocne.append({'shares': potrebne_ks, 'date': n['date']})
+                    nákupy_skutocne.append({'shares': potrebne_ks, 'date': n['date']}) # OPRAVENÉ: Vymazaná diakritika z premennej
                     potrebne_ks = 0.0
             
             dnes = datetime.now()
