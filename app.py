@@ -69,7 +69,7 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker]
+                    najstarsie = sklad[ticker][0] # OPRAVENÉ: Presný index na prvý nákup zo zoznamu
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
@@ -125,7 +125,7 @@ if uploaded_files:
             if v['zisk_do_roka'] <= 0:
                 st.info(f"Utrpeli ste stratu ({v['zisk_do_roka']:.2f} EUR). Netreba nič vypĺňať.")
             else:
-                if prepočet_ok := priznany_zisk_po_oslobodeni == 0:
+                if priznany_zisk_po_oslobodeni == 0:
                     st.info(f"Zisk {v['zisk_do_roka']:.2f} EUR nepresiahol 500 EUR. Je oslobodený.")
                 else:
                     pomer = priznany_zisk_po_oslobodeni / v['zisk_do_roka']
@@ -134,7 +134,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: PLOCHÝ DNEŠNÝ OPTIMALIZÁTOR (BEZ VNUKANÝCH BLOKOV)
+    # 2. KROK: DNEŠNÝ OPTIMALIZÁTOR - OCHRANNÁ HRANICA PRACHU STANOVENÁ NA 0.05 KS
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
