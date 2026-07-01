@@ -16,7 +16,7 @@ if uploaded_files:
         zoznam_df.append(pd.read_csv(file))
         
     df = pd.concat(zoznam_df, ignore_index=True)
-    df['Time'] = pd.to_datetime(df['Time']).dt.tz_localize(None) # Odstránime časové zóny pre presný výpočet dní
+    df['Time'] = pd.to_datetime(df['Time']).dt.tz_localize(None)
     df = df.sort_values(by='Time').reset_index(drop=True)
     
     sklad = {}
@@ -66,7 +66,7 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker][0]
+                    najstarsie = sklad[ticker]
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
@@ -122,7 +122,7 @@ if uploaded_files:
             if v['zisk_do_roka'] <= 0:
                 st.info(f"Utrpeli ste stratu ({v['zisk_do_roka']:.2f} EUR). Netreba nič vypĺňať.")
             else:
-                if Docs := priznany_zisk_po_oslobodeni == 0:
+                if priznany_zisk_po_oslobodeni == 0:
                     st.info(f"Zisk {v['zisk_do_roka']:.2f} EUR nepresiahol 500 EUR. Je oslobodený.")
                 else:
                     pomer = priznany_zisk_po_oslobodeni / v['zisk_do_roka']
@@ -131,7 +131,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 ULTIMÁTNY OPTIMALIZÁTOR - BEZ PRACHU (ČISTÝ)
+    # 🔥 OPTIMALIZÁTOR - OCHRANNÁ HRANICA POSUNUTÁ NA 5 EUR (Zmaže Ferrari prach)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -141,7 +141,7 @@ if uploaded_files:
     for t in sklad.keys():
         if len(sklad[t]) > 0:
             odhad_hodnoty = sum(n['shares'] * n['cena_za_kus'] for n in sklad[t])
-            if odhad_hodnoty >= 1.0: 
+            if odhad_hodnoty >= 5.0: # FILTROVANIE: Musíš držať pozíciu aspoň za 5 EUR
                 aktivne_tickery.append(t)
                 
     aktivne_tickery = sorted(aktivne_tickery)
@@ -156,7 +156,7 @@ if uploaded_files:
             ponuka_pre_menu.append(text_polozky)
             mapovanie[text_polozky] = t
             
-        vybrany_text = st.selectbox("Vyberte alebo napíšte názov firma alebo skratku (Ticker):", ponuka_pre_menu)
+        vybrany_text = st.selectbox("Vyberte alebo napíšte názov firmy alebo skratku (Ticker):", ponuka_pre_menu)
         
         if vybrany_text:
             vybrany_ticker = mapovanie[vybrany_text]
