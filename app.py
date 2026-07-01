@@ -23,7 +23,7 @@ if uploaded_files:
     vysledky_po_rokoch = {}
     databaza_mien = {}
     
-    # 1. KROK: ČISTÁ MATEMATIKA A FIFO ROČNÉ PREHĽADY
+    # 1. KROK: ČISTÁ FIFO MATEMATIKA A ROČNÉ PREHĽADY
     for _, riadok in df.iterrows():
         typ = str(riadok['Action']).lower()
         ticker_surovy = str(riadok['Ticker'])
@@ -53,11 +53,10 @@ if uploaded_files:
             vysledky_po_rokoch[rok]['div_dan'] += tax
             continue
             
-        # OČISTENIE OD DROBNÝCH DIER BROKERA PRI SPLITOCH
         if ('sell' in typ or 'divestment' in typ or 'withdrawal' in typ) and abs(result) < 2.0 and total < 10.0:
             continue
             
-        # SPRACUJEME VÝHRADNE SKUTOČNÉ INVESTIČNÉ AKCIE (IGNORUJEME DIVIDENDOVÉ RIADKY PRE SKLAD)
+        # ZAPOČÍTAVAME VÝHRADNE REÁLNE INVESTIČNÉ AKCIE (BEZ DIVIDENDOVÉHO ŠUMU)
         if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
             if ticker not in sklad: sklad[ticker] = []
             sklad[ticker].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares if shares > 0 else 0.0})
@@ -70,7 +69,7 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker][0]
+                    najstarsie = sklad[ticker]
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
@@ -126,7 +125,7 @@ if uploaded_files:
             if v['zisk_do_roka'] <= 0:
                 st.info(f"Utrpeli ste stratu ({v['zisk_do_roka']:.2f} EUR). Netreba nič vypĺňať.")
             else:
-                if priznany_zisk_po_oslobodeni == 0:
+                if prepočet_ok := priznany_zisk_po_oslobodeni == 0:
                     st.info(f"Zisk {v['zisk_do_roka']:.2f} EUR nepresiahol 500 EUR. Je oslobodený.")
                 else:
                     pomer = priznany_zisk_po_oslobodeni / v['zisk_do_roka']
@@ -135,7 +134,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: DNEŠNÝ OPTIMALIZÁTOR - PÁROVANIE S DROBNÝM LIMITOM PRE PRACH < 0.05 KS
+    # 2. KROK: PLOCHÝ DNEŠNÝ OPTIMALIZÁTOR (BEZ VNUKANÝCH BLOKOV)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -146,50 +145,49 @@ if uploaded_files:
     aktivne_tickery = []
     for t in sklad.keys():
         celkovo_ks = sum(n['shares'] for n in sklad[t])
-        if skryt_stare and celkovo_ks >= 0.05: # AKO V COLABE: Čistá stopka pre akýkoľvek prach
+        if skryt_stare and celkovo_ks >= 0.05:
             aktivne_tickery.append(t)
         elif not skryt_stare and celkovo_ks > 0.0001:
             aktivne_tickery.append(t)
                 
     aktivne_tickery = sorted(aktivne_tickery)
     
-    if aktivne_tickery:
+    if not aktivne_tickery:
+        st.info("Vo vašej histórii momentálne nezostali žiadne otvorené pozície akcií.")
+    else:
         ponuka_pre_menu = []
         mapovanie = {}
         for t in aktivne_tickery:
-            plne_meno = databaza_mien.get(t, "Spoločnosť z CSV")
-            text_polozky = f"{t} - {plne_meno}"
+            text_polozky = f"{t} - {databaza_mien.get(t, 'Spoločnosť z CSV')}"
             ponuka_pre_menu.append(text_polozky)
             mapovanie[text_polozky] = t
             
         vybrany_text = st.selectbox("Vyberte alebo napíšte názov firmy alebo skratku (Ticker):", ponuka_pre_menu)
+        vybrany_ticker = mapovanie[vybrany_text]
         
-        if vybrany_text:
-            vybrany_ticker = mapovanie[vybrany_text]
-            st.subheader(f"📊 Analýza pozície: {vybrany_text}")
-            nákupy = sklad[vybrany_ticker]
-            celkovo_vlastnene = sum(n['shares'] for n in nákupy)
-            st.write(f"Aktuálne reálne vlastníte: **{celkovo_vlastnene:.5f} ks**.")
-            
-            dnes = datetime.now()
-            ks_bez_dane = 0.0
-            ks_mlade = 0.0
-            podrobnosti_mlade = []
-            
-            for n in nákupy:
-                vek_dni = (dnes - n['date'].to_pydatetime()).days if hasattr(n['date'], 'to_pydatetime') else (dnes - n['date']).days
-                if vek_dni >= 365:
-                    ks_bez_dane += n['shares']
-                else:
-                    ks_mlade += n['shares']
-                    dni_do_roka = 365 - vek_dni
-                    podrobnosti_mlade.append({'shares': n['shares'], 'date': n['date'].strftime('%d.%m.%Y'), 'dni_cakat': dni_do_roka})
-            
-            c1, c2 = st.columns(2)
-            c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**")
-            c2.warning(f"🔒 MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes):\n**{ks_mlade:.5f} ks**")
-            
-            if ks_mlade > 0:
-                st.markdown("### 📅 Kedy predáte zvyšok bez dane?")
-                st.write("Tu je prehľad balíčkov, ktoré ešte musíte podržať:")
-                for pm in podrobnosti_mlade:
+        st.subheader(f"📊 Analýza pozície: {vybrany_text}")
+        nákupy = sklad[vybrany_ticker]
+        celkovo_vlastnene = sum(n['shares'] for n in nákupy)
+        st.write(f"Aktuálne reálne vlastníte: **{celkovo_vlastnene:.5f} ks**.")
+        
+        dnes = datetime.now()
+        ks_bez_dane = 0.0
+        ks_mlade = 0.0
+        podrobnosti_mlade = []
+        
+        for n in nákupy:
+            vek_dni = (dnes - n['date'].to_pydatetime()).days if hasattr(n['date'], 'to_pydatetime') else (dnes - n['date']).days
+            if vek_dni >= 365:
+                ks_bez_dane += n['shares']
+            else:
+                ks_mlade += n['shares']
+                podrobnosti_mlade.append({'shares': n['shares'], 'date': n['date'].strftime('%d.%m.%Y'), 'dni': 365 - vek_dni})
+        
+        c1, c2 = st.columns(2)
+        c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**")
+        c2.warning(f"🔒 MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes):\n**{ks_mlade:.5f} ks**")
+        
+        if ks_mlade > 0:
+            st.markdown("### 📅 Kedy predáte zvyšok bez dane?")
+            for pm in podrobnosti_mlade:
+                st.write(f"• Fragment **{pm['shares']:.5f} ks** (kúpený {pm['date']}) bude oslobodený o **{pm['dni']} dní**.")
