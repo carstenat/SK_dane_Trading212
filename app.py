@@ -23,7 +23,7 @@ if uploaded_files:
     vysledky_po_rokoch = {}
     databaza_mien = {}
     
-    # 1. KROK: HISTORICKÁ FIFO MATEMATIKA PRE DANÉ ROKY
+    # 1. KROK: BEZPEČNÁ HISTORICKÁ FIFO MATEMATIKA (BEZ RIZIKA ZACYKLENIA)
     for _, riadok in df.iterrows():
         typ = str(riadok['Action']).lower()
         ticker_surovy = str(riadok['Ticker'])
@@ -142,7 +142,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: DNEŠNÝ OPTIMALIZÁTOR - BEZ NEBEZPEČNÝCH MEDZIER
+    # 🔥 2. KROK: PLOCHÝ OPTIMALIZÁTOR - BEZ NEBEZPEČNÝCH MEDZIER A SLUČIEK
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -168,8 +168,7 @@ if uploaded_files:
             
             if not nákupy_vsetky:
                 st.info("V histórii nákupov pre tento ticker neboli nájdené žiadne otvorené balíčky.")
-            
-            if nákupy_vsetky:
+            else:
                 nákupy_vsetky = sorted(nákupy_vsetky, key=lambda x: x['date'])
                 nákupy_skutocne = []
                 potrebne_ks = skutocny_stav_mobil
