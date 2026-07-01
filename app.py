@@ -142,7 +142,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: DNEŠNÝ OPTIMALIZÁTOR - 100% S PLOCHÝM ZAROVNANÍM
+    # 🔥 2. KROK: DNEŠNÝ OPTIMALIZÁTOR - BEZ NEBEZPEČNÝCH MEDZIER
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -168,13 +168,14 @@ if uploaded_files:
             
             if not nákupy_vsetky:
                 st.info("V histórii nákupov pre tento ticker neboli nájdené žiadne otvorené balíčky.")
-            else:
+            
+            if nákupy_vsetky:
                 nákupy_vsetky = sorted(nákupy_vsetky, key=lambda x: x['date'])
                 nákupy_skutocne = []
                 potrebne_ks = skutocny_stav_mobil
                 
                 for n in nákupy_vsetky:
-                    if potrebné_break := (potrebne_ks <= 0):
+                    if potrebne_ks <= 0:
                         break
                     vziat_ks = min(n['shares'], potrebne_ks)
                     nákupy_skutocne.append({'shares': vziat_ks, 'date': n['date']})
@@ -189,5 +190,5 @@ if uploaded_files:
                 list_dat_oslobodenia = []
                 list_cakania = []
                 
-                # 💡 UKUKŠENÝ, PLOCHÝ CYKLUS BEZ VNÚTORNÝCH BLOKOV (OPRAVENÁ CHYBA ZO SIVÉHO OBRÁZKA)
                 for n in nákupy_skutocne:
+                    nakup_pure = pd.to_datetime(n['date']).to_pydatetime() if hasattr(n['date'], 'to_pydatetime') else n['date']
