@@ -135,7 +135,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: 100% BEZPEČNÝ OPTIMALIZÁTOR (S KREKTNÝM PRÍKAZOM BREAK)
+    # 🔥 2. KROK: OPTIMALIZÁTOR - NOVÝ UNIKÁTNY KĽÚČ PRE PREHLIADAČ
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -154,7 +154,8 @@ if uploaded_files:
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         vybrany_ticker = mapovanie[vybrany_text]
         
-        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne SKUTOČNE vidíte v aplikácii Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f")
+        # 💡 ZMENENÝ KĽÚČ PREMENNEJ (key=), KTORÝ PREMAŽE ZASEKNUTÚ CACHE PREHLIADAČA NATVRDO
+        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne SKUTOČNE vidíte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_t212")
         
         if skutocny_stav_mobil > 0:
             nákupy_vsetky = sklad[vybrany_ticker]
@@ -165,8 +166,8 @@ if uploaded_files:
             
             for n in nákupy_vsetky:
                 if potrebne_ks <= 0:
-                    break # OPRAVENÉ: Príkaz break okamžite a bleskovo zastaví cyklus, ak máme kusy splnené
-                vziat_ks = min(n['shares'], potrebne_ks)
+                    break
+                vziat_ks = min(n['shares'], preventable_ks := potrebne_ks)
                 nákupy_skutocne.append({'shares': vziat_ks, 'date': n['date']})
                 potrebne_ks -= vziat_ks
             
@@ -186,7 +187,7 @@ if uploaded_files:
                         "Množstvo (ks)": f"{n['shares']:.5f}",
                         "Daňový stav": "🟢 Bez dane (Nad 1 rok)",
                         "Dátum oslobodenia": "Už oslobodené",
-                        "Zostáva čakať": "0 dní (Voľný predaj)"
+                        "Zostáva čakať": "0 dní"
                     })
                 else:
                     ks_mlade += n['shares']
