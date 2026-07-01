@@ -1,12 +1,14 @@
 import streamlit as st
 import pandas as pd
 import io
+from datetime import datetime
 
 st.set_page_config(page_title="Trading 212 Daňová Kalkulačka", page_icon="📈", layout="wide")
 
-st.title("📈 Súkromný Daňový Asistent pre Trading 212 (SR)")
-st.write("Nahrajte svoje CSV exporty z Trading 212 a aplikácia vám bleskovo vygeneruje manuál na vyplnenie slovenského daňového priznania.")
+st.title("📈 Súkromný Daňový Asistent a Optimalizátor pre Trading 212 (SR)")
+st.write("Nahrajte svoje CSV exporty z Trading 212 a získajte ročný daňový manuál + checker pre bezpečný predaj akcií.")
 
+# Nahrávacia zóna
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV súbory (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
 
 if uploaded_files:
@@ -21,6 +23,7 @@ if uploaded_files:
     sklad = {}
     vysledky_po_rokoch = {}
     
+    # FIFO logika a spracovanie histórie
     for _, riadok in df.iterrows():
         typ = str(riadok['Action']).lower()
         ticker = str(riadok['Ticker'])
@@ -84,6 +87,7 @@ if uploaded_files:
 
     st.success("🚀 Analýza úspešne dokončená!")
     
+    # ZOBRAZENIE ROČNÝCH REPORTU
     roky_zoznam = sorted(list(vysledky_po_rokoch.keys()), reverse=True)
     tabs = st.tabs([f"📅 Rok {r}" for r in roky_zoznam])
     
@@ -101,14 +105,11 @@ if uploaded_files:
             col1, col2 = st.columns(2)
             col1.metric("Celková daňová povinnosť", f"{celkovo:.2f} EUR")
             col2.metric("Dlhodobý zisk (BEZ DANE)", f"{v['zisk_po_roku']:.2f} EUR")
-            
             st.markdown("---")
             st.subheader("📑 VIII. ODDIEL - Kapitálový majetok")
             st.write(f"**Riadok 2 (Úroky z vkladov):** Príjmy: `{v['uroky']:.2f} EUR` | Daň: `{realna_dan_uroky:.2f} EUR`")
-            
             st.subheader("📑 PRÍLOHA č. 2 - Dividendy")
             st.write(f"**Riadok 1:** Príjem Brutto: `{v['div_brutto']:.2f} EUR` | Daň zaplatená v zahraničí: `{v['div_dan']:.2f} EUR` *(V SR doplácate 0.00 €)*")
-            
             st.subheader("📑 X. ODDIEL - Ostatné príjmy (§ 8)")
             if v['zisk_do_roka'] <= 0:
                 st.info(f"Utrpeli ste stratu ({v['zisk_do_roka']:.2f} EUR). Netreba nič vypĺňať.")
@@ -120,3 +121,55 @@ if uploaded_files:
                     st.write(f"**Riadok 5 (Stĺpec 1 - Príjmy):** `{v['prijmy_kratkodobe']*pomer:.2f} EUR`")
                     st.write(f"**Riadok 5 (Stĺpec 2 - Výdavky):** `{v['vydavky_kratkodobe']*pomer:.2f} EUR`")
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
+
+    # =========================================================================
+    # 🔥 NOVÁ SEKCIÁ: KONTROLNÝ CHECKER PRE DNEŠNÝ PREDAJ (OPTIMALIZÁTOR)
+    # =========================================================================
+    st.markdown("##")
+    st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
+    st.write(f"Aplikácia analyzovala váš aktuálny otvorený sklad k dnešnému dňu (**{datetime.now().strftime('%d.%m.%Y')}**).")
+    
+    # Vytvoríme zoznam všetkých držaných tickerov na výber
+    vsetky_tickery = sorted([t for t in sklad.keys() if sum(n['shares'] for n in sklad[t]) > 0])
+    
+    if vsetky_tickery:
+        vybrany_ticker = st.selectbox("Vyberte alebo napíšte skratku akcie (Ticker) na kontrolu:", vsetky_tickery)
+        
+        if vybrany_ticker:
+            st.subheader(f"📊 Analýza pozície pre {vybrany_ticker}")
+            nákupy = sklad[vybrany_ticker]
+            
+            celkovo_vlastnene = sum(n['shares'] for n in nákupy)
+            st.write(f"Aktuálne celkovo vlastníte: **{celkovo_vlastnene:.5f} ks** tejto akcie.")
+            
+            dnes = datetime.now()
+            ks_bez_dane = 0.0
+            ks_mlade = 0.0
+            
+            podrobnosti_mlade = []
+            
+            for n in nákupy:
+                vek_dni = (dnes - n['date']).days
+                if vek_dni >= 365:
+                    ks_bez_dane += n['shares']
+                else:
+                    ks_mlade += n['shares']
+                    dni_do_roka = 365 - vek_dni
+                    podrobnosti_mlade.append({
+                        'shares': n['shares'],
+                        'date': n['date'].strftime('%d.%m.%Y'),
+                        'dni_cakat': dni_do_roka
+                    })
+            
+            # Vizuálne zobrazenie kariet pre kamoša
+            c1, c2 = st.columns(2)
+            c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**")
+            c2.warning(f"🔒 MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes):\n**{ks_mlade:.5f} ks**")
+            
+            if ks_mlade > 0:
+                st.markdown("### 📅 Kedy predáte zvyšok bez dane?")
+                st.write("Tu je prehľad balíčkov, ktoré ešte musíte podržať:")
+                for pm in podrobnosti_mlade:
+                    st.write(f"• Fragment o veľkosti **{pm['shares']:.5f} ks** (nakúpený {pm['date']}) bude oslobodený o **{pm['dni_cakat']} dní**.")
+    else:
+        st.info("Vo vašej histórii momentálne nezostali žiadne otvorené pozície akcií.")
