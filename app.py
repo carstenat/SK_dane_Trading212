@@ -50,7 +50,6 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    # Pretypovanie a ošetrenie nulových hodnôt
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
     
@@ -64,9 +63,6 @@ if uploaded_files:
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
                 databaza_mien[tick_c] = full_name
 
-    # =========================================================================
-    # 🔥 DAŇOVÝ OPTIMALIZÁTOR SKLADU (IZOLOVANÝ A PLOCHÝ)
-    # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     
@@ -83,14 +79,14 @@ if uploaded_files:
             mapovanie_tickerov[text_riadku] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v140")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v145")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v140")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v145")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v140")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v145")
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
@@ -102,7 +98,6 @@ if uploaded_files:
             datum = riadok['Time']
             
             if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
-                # 🛡️ ABSOLÚTNA POISTKA: Ak sú nákupné kusy nula (split), riadok bezpečne preskočíme a kód nepadne
                 if shares > 0.00001:
                     sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
             elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
@@ -120,7 +115,7 @@ if uploaded_files:
             skutocny_stav = min(vstup_vlastnene, max_sklad_dostupny)
             
             if skutocny_stav <= 0:
-                st.warning(f"Upozornenie: Pre {vybrany_ticker_pure} nemáte podľa nahranej histórie otvorenú žiadnu pozíciu.")
+                st.warning(f"Upozornenie: Pre {vybrany_ticker_pure} nemáte otvorenu žiadnu pozíciu.")
             else:
                 potrebne_ks = skutocny_stav
                 dnes = datetime.now()
@@ -168,11 +163,14 @@ if uploaded_files:
                 st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
                 st.progress(float(ks_bez_dane / skutocny_stav))
                 
-                c1, c2 = st.columns(2)
+                # 🛡️ STABILNÉ KARTY BEZ VNÚTORNÝCH BLOKOV (UKÁŽU VŠETKO NARAZ NA 100%)
+                col_c1, col_c2 = st.columns(2)
                 
                 if aktualna_cena > 0:
                     trhova_hodnota_safe = ks_bez_dane * aktualna_cena
                     cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
-                    c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**\nHodnota: {trhova_hodnota_safe:.2f} € (Čistý zisk: +{cisty_zisk_safe:.2f} €)")
+                    col_c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**\nHodnota: {trhova_hodnota_safe:.2f} € (Čistý zisk: +{cisty_zisk_safe:.2f} €)")
                     
-                    prijem_mlade = ks_mlade * aktualna_cena
+                    trhova_hodnota_mlade = ks_mlade * aktualna_cena
+                    zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
+                    celkova_hrozba = round((zisk_mlade * 0.19) + (zisk_mlade * 0.14), 2)
