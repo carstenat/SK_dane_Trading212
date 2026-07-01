@@ -39,7 +39,7 @@ if uploaded_files:
         total = float(riadok['Total']) if pd.notna(riadok['Total']) else 0.0
         result = float(riadok['Result']) if pd.notna(riadok['Result']) else 0.0
         tax = float(riadok['Withholding tax']) if pd.notna(riadok['Withholding tax']) else 0.0
-        datum = pd.to_datetime(riadok['Time']) # BEZPEČNOSTNÁ POISTKA NA FORMÁT DÁTUMU
+        datum = pd.to_datetime(riadok['Time'])
         rok = datum.year
         
         if rok not in vysledky_po_rokoch:
@@ -66,8 +66,8 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker][0] # OPRAVENÉ: Presný index na prvý nákup v zozname
-                    vek = datum - pd.to_datetime(najstarsie['date']) # OPRAVENÉ: Bezpečný rozdiel dvoch časov
+                    najstarsie = sklad[ticker]
+                    vek = datum - pd.to_datetime(najstarsie['date'])
                     splnil_rok = vek.days >= 365
                     
                     if najstarsie['shares'] <= predat_este:
@@ -131,13 +131,21 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR PRE PREDAJ
+    # 🔥 ULTIMÁTNY OPTIMALIZÁTOR - BEZ FINANČNÉHO PRACHU (< 1 EUR)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     st.write("Aplikácia analyzovala váš skutočný aktuálny otvorený sklad k dnešnému dňu.")
     
-    aktivne_tickery = sorted([t for t in sklad.keys() if len(sklad[t]) > 0 and sum(n['shares'] for n in sklad[t]) > 0.00001])
+    # FILTROVANIE PRACHU: Ticker prejde, len ak je celková hodnota zostávajúcich nákupov aspoň 1.00 EUR
+    aktivne_tickery = []
+    for t in sklad.keys():
+        if len(sklad[t]) > 0:
+            odhadovana_hodnota_skladu = sum(n['shares'] * n['cena_za_kus'] for n in sklad[t])
+            if odhadovana_hodnota_skladu >= 1.0: # Ak držíš akcie aspoň za jedno euro
+                aktivne_tickery.append(t)
+                
+    aktivne_tickery = sorted(aktivne_tickery)
     
     if aktivne_tickery:
         ponuka_pre_menu = []
