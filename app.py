@@ -135,7 +135,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR S CHROMATICKOU DAŇOVOU TABUĽKOU
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR S HISTORICKOU TABUĽKOU (ČISTÝ BEZ COMENT CHÝB)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -176,8 +176,6 @@ if uploaded_files:
             dnes = datetime.now()
             ks_bez_dane = 0.0
             ks_mlade = 0.0
-            
-            # Príprava riadkov pre našu peknú novú tabuľku
             riadky_tabulky = []
             
             for n in nákupy_skutocne:
@@ -194,3 +192,4 @@ if uploaded_files:
                         "Zostáva čakať": "0 dní (Voľný predaj)"
                     })
                 else:
+                    ks_mlade += n['shares']
