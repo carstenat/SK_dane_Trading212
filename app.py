@@ -5,7 +5,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 🎨 FINTECH VZHĽAD (DEFAULT SVETLÝ)
+# 🎨 FINTECH VZHĽAD (DEFAULT SVETLÝ, VYSOKÝ KONTRAST)
 # =========================================================================
 st.sidebar.header("⚙️ Nastavenia vzhľadu")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
@@ -117,6 +117,7 @@ if uploaded_files:
                 vydavok_safe_balika = 0.0
                 vydavok_mladeho_balika = 0.0
                 
+                # 🛡️ 100% SEPAROVANÁ PREDPRAVENÁ DATABÁZA PRE TABUĽKU (MIMO STREAMLITU)
                 list_dat_nakupu = []
                 list_mnozstiev = []
                 list_stavov = []
@@ -143,13 +144,13 @@ if uploaded_files:
                     if vek_dni >= 365:
                         ks_bez_dane += vziat_ks
                         vydavok_safe_balika += cena_balika
-                        list_stavov.append("🟢 Bez dane (Nad 1 rok)")
+                        list_stavov.append("🟢 BEZ DANE")
                         list_dat_oslobodenia.append("Už oslobodené")
                         list_cakania.append("0 dní")
                     else:
                         ks_mlade += vziat_ks
                         vydavok_mladeho_balika += cena_balika
-                        list_stavov.append("🔴 Zdaňuje sa (Mladá akcia)")
+                        list_stavov.append("🔴 ZDAŇUJE SA")
                         list_dat_oslobodenia.append((nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y'))
                         list_cakania.append(f"⏳ {365 - vek_dni} dní")
                 
@@ -164,7 +165,7 @@ if uploaded_files:
                 cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
                 st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
                 
-                # 🔒 2. ORANŽOVO-ŽLTÁ VÝSTRAHA (ZÁVÄZNE UZAVRETÉ ZÁTVORKY A SYNTAX)
+                # 🔒 2. ORANŽOVO-ŽLTÁ VÝSTRAHA
                 trhova_hodnota_mlade = ks_mlade * aktualna_cena
                 zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
                 dan_19 = round(zisk_mlade * 0.19, 2)
@@ -174,14 +175,13 @@ if uploaded_files:
                 st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
                 st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: {zisk_mlade:.2f} EUR | Daň z príjmu (19%): {dan_19:.2f} EUR | Zdravotné odvody (14%): {odvody_14:.2f} EUR | Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR")
                 
-                # 📋 3. PREHĽADNÁ TABUĽKA S NÁKUPNÝMI CENAMI
-                st.markdown("### 📋 Detailný rozpis nákupných balíčkov na vašom sklade:")
-                tovarna_tabulky = pd.DataFrame({
-                    "Dátum nákupu": list_dat_nakupu,
-                    "Množstvo (ks)": list_mnozstiev,
-                    "Nákupná cena/ks": list_povodna_cena,
-                    "Celkový nákup": list_celkovy_nakup,
-                    "Daňový stav": list_stavov,
-                    "Dátum oslobodenia": list_dat_oslobodenia,
-                    "Zostáva čakať": list_cakania
-                })
+                # 📥 3. BEZPEČNÉ ROZKLIKÁVACIE OKNO S IZOLOVANOU TABUĽKOU
+                with st.expander("📋 Zobraziť detailný rozpis nákupných balíčkov (Frakcií)"):
+                    tovarna_tabulky = pd.DataFrame({
+                        "Dátum nákupu": list_dat_nakupu,
+                        "Množstvo (ks)": list_mnozstiev,
+                        "Nákupná cena/ks": list_povodna_cena,
+                        "Celkový nákup": list_celkovy_nakup,
+                        "Daňový stav": list_stavov,
+                        "Dátum oslobodenia": list_dat_oslobodenia,
+                        "Zostáva čakať": list_cakania
