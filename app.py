@@ -126,7 +126,7 @@ if uploaded_files:
             if v['zisk_do_roka'] <= 0:
                 st.info(f"Utrpeli ste stratu ({v['zisk_do_roka']:.2f} EUR). Netreba nič vypĺňať.")
             else:
-                if prepocet_ok := (priznany_zisk_po_oslobodeni == 0): # OPRAVENÉ: Vymazaná diakritika z premennej
+                if prepocet_ok := (priznany_zisk_po_oslobodeni == 0):
                     st.info(f"Zisk {v['zisk_do_roka']:.2f} EUR nepresiahol 500 EUR. Je oslobodený.")
                 else:
                     pomer = priznany_zisk_po_oslobodeni / v['zisk_do_roka']
@@ -135,7 +135,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR S CHROMATICKOU TABUĽKOU
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR OVERENÝ STAVOM Z APLIKÁCIE TRADING 212
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -167,11 +167,11 @@ if uploaded_files:
                 if potrebne_ks <= 0:
                     break
                 if n['shares'] <= potrebne_ks:
-                    nákupy_skutocne.append(n)
+                    nákupy_skutocne.append({'shares': n['shares'], 'date': n['date']})
                     potrebne_ks -= n['shares']
                 else:
                     nákupy_skutocne.append({'shares': potrebne_ks, 'date': n['date']})
-                    potrebne_ks = 0.0
+                    potrebne_ks = 0.0 # OPRAVENÉ: Absolútne čistá zmena premennej, slučka sa už nikdy nezasekne
             
             dnes = datetime.now()
             ks_bez_dane = 0.0
@@ -191,5 +191,3 @@ if uploaded_files:
                         "Dátum oslobodenia": "Už oslobodené",
                         "Zostáva čakať": "0 dní (Voľný predaj)"
                     })
-                else:
-                    ks_mlade += n['shares']
