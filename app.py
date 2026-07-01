@@ -4,10 +4,49 @@ from datetime import datetime
 
 st.set_page_config(page_title="Trading 212 Daňový Asistent & Optimalizátor", page_icon="📈", layout="wide")
 
+# =========================================================================
+# 🎨 FUNKČNÝ PREPÍNAČ PRE DARK MODE (ČISTÉ CSS)
+# =========================================================================
+st.sidebar.header("⚙️ Nastavenia vzhľadu")
+dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=True)
+
+if dark_mode:
+    st.markdown("""
+        <style>
+        .stApp {
+            background-color: #121214 !important;
+            color: #E1E1E6 !important;
+        }
+        h1, h2, h3, h4, h5, h6, label, p, span {
+            color: #F4F4F5 !important;
+        }
+        .stTabs [data-baseweb="tab-list"] {
+            background-color: #1A1A1E !important;
+            border-radius: 8px;
+            padding: 5px;
+        }
+        .stTabs [data-baseweb="tab"] {
+            color: #A1A1AA !important;
+        }
+        .stTabs [aria-selected="true"] {
+            color: #38BDF8 !important;
+            font-weight: bold;
+        }
+        div[data-testid="stMetricValue"] {
+            color: #38BDF8 !important;
+        }
+        .stDataFrame div {
+            background-color: #1A1A1E !important;
+            color: #E1E1E6 !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+# Main obsah
 st.title("📈 Súkromný Daňový Asistent a Optimalizátor pre Trading 212 (SR)")
 st.write("Nahrajte svoje CSV exporty z Trading 212 a získajte ročný daňový manuál + checker pre bezpečný predaj akcií.")
 
-uploaded_files = st.file_uploader(" Sem presuňte vaše CSV súbory (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
+uploaded_files = st.file_uploader("Sem presuňte vaše CSV súbory (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
 
 if uploaded_files:
     zoznam_df = []
@@ -18,7 +57,6 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    # Unifikácia stĺpca Ticker a Ticker_Clean
     df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.replace("US ", "").str.replace("_US", "").str.replace("_US_EQ", "").str.replace("_EQ", "").str.replace(".US", "").str.strip().str.replace("_", "").str.replace(".", "").str.replace(" ", "").str.upper()
     
     sklad_historicky = {}
@@ -26,7 +64,7 @@ if uploaded_files:
     vysledky_po_rokoch = {}
     
     # =========================================================================
-    # KROK 1: HISTORICKÁ FIFO MATEMATIKA PRE ROČNÉ PREHĽADY (ZABEZPEČENÁ PROTI ZMRZNUTIU)
+    # KROK 1: HISTORICKÁ FIFO MATEMATIKA PRE ROČNÉ PREHĽADY
     # =========================================================================
     for _, riadok in df.iterrows():
         typ = str(riadok['Action']).lower()
@@ -155,24 +193,3 @@ if uploaded_files:
     st.markdown("##")
     st.markdown("---")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
-    st.write("Vyberte firmu zo zoznamu a zadajte aktuálny otvorený stav, ktorý vidíte v platforme Trading 212.")
-    
-    # Nájdeme unikátne tickery pre menu
-    df_akcie = df[df['Action'].str.lower().str.contains('buy|investment|deposit|sell|divestment|withdrawal|rebalancing', na=False)].copy()
-    zoznam_tickerov_all = sorted(list(df_akcie['Ticker_Clean'].unique()))
-    
-    if zoznam_tickerov_all:
-        ponuka_pre_menu = []
-        mapovanie_tickerov = {}
-        for t in zoznam_tickerov_all:
-            full_company_name = databaza_mien.get(t, "Neznáma spoločnosť")
-            # 💡 VYRIEŠENÉ: Do menu vložíme kód aj celý názov spoločnosti
-            text_riadku = f"{t} - {full_company_name}"
-            ponuka_pre_menu.append(text_riadku)
-            mapovanie_tickerov[text_riadku] = t
-            
-        ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
-        
-        vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
-        
