@@ -22,7 +22,9 @@ if uploaded_files:
     databaza_mien = {}
     vysledky_po_rokoch = {}
     
+    # =========================================================================
     # 1. KROK: HISTORICKÁ FIFO MATEMATIKA PRE ROČNÉ PREHĽADY
+    # =========================================================================
     for _, riadok in df.iterrows():
         typ = str(riadok['Action']).lower()
         ticker_surovy = str(riadok['Ticker'])
@@ -141,7 +143,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - ÚPLNE PLOCHÁ MATEMATIKA BEZ ODSADENIA
+    # 2. KROK: DAŇOVÝ OPTIMALIZÁTOR - BEZPEČNÝ FORMULÁR S PRESNÝM INDEXOM TICKETU
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -162,7 +164,7 @@ if uploaded_files:
         ponuka_pre_menu = [f"{t} - {databaza_mien.get(t, 'Spoločnosť')}" for t in zoznam_vsetkych_tickerov]
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         
-        # 🔓 LOGICKÁ OPRAVA: Pridaný index [0] pred funkciu .strip(), aby kód znova nezamrzol!
+        # 🔓 LOGICKÁ OPRAVA: Pridaný chýbajúci index prvej položky [0], aby split nevytváral chybné pole
         vybrany_ticker = vybrany_text.split(" - ")[0].strip()
         
         skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne vlastníte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_bez_formulara_v3")
@@ -172,10 +174,3 @@ if uploaded_files:
         df_nakupy = df_nakupy.sort_values(by='Time').reset_index(drop=True)
         
         potrebne_ks = skutocny_stav_mobil
-        dnes = datetime.now()
-        ks_bez_dane = 0.0
-        ks_mlade = 0.0
-        
-        list_dat_nakupu = []
-        list_mnozstiev = []
-        list_stavov = []
