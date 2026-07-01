@@ -53,17 +53,17 @@ if uploaded_files:
             vysledky_po_rokoch[rok]['div_dan'] += tax
             continue
             
-        # AKCIA S KUSMI (Ošetrenie technických chýb)
+        # AKCIA S KUSMI
         if shares != 0:
             if ('sell' in typ or 'divestment' in typ or shares < 0) and abs(result) < 2.0 and total < 10.0:
                 continue
                 
-            # ABSOLÚTNA LOGIKA NÁKUPU: Kladné kusy a overený nákupný text
+            # ABSOLÚTNA LOGIKA NÁKUPU: Kladné kusy
             if shares > 0 and ('buy' in typ or 'investment' in typ or 'deposit' in typ or 'received' in typ):
                 if ticker not in sklad: sklad[ticker] = []
                 sklad[ticker].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares if shares > 0 else 0.0})
                 
-            # ABSOLÚTNA LOGIKA PREDAJU: Záporné kusy alebo predajné texty (Withdrawal, Rebalancing...)
+            # ABSOLÚTNA LOGIKA PREDAJU: Záporné kusy alebo predajné texty
             elif shares < 0 or 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ:
                 predat_este = abs(shares)
                 riadok_po_roku = 0.0
@@ -72,7 +72,7 @@ if uploaded_files:
                 
                 if ticker in sklad and sklad[ticker]:
                     while predat_este > 0 and sklad[ticker]:
-                        najstarsie = sklad[ticker]
+                        najstarsie = sklad[ticker][0] # OPRAVENÉ: Presný index na prvý nákup v zozname
                         vek = datum - najstarsie['date']
                         splnil_rok = vek.days >= 365
                         
