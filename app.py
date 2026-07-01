@@ -6,7 +6,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 PRO Daňový Asistent & Optimalizátor", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 🎨 ULTRA-KOMPAKTNÝ FINTECH LUXUSNÝ DIZAJN (PRE MOBIL, TABLET AJ DESKTOP)
+# 🎨 ULTRA-KOMPAKTNÝ FINTECH LUXUSNÝ DIZAJN (DARK MODE PRE VŠETKY ELEMENTY)
 # =========================================================================
 st.sidebar.header("⚙️ Vzhľad a Vychytávky")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=True)
@@ -84,11 +84,11 @@ if uploaded_files:
         
         col_input1, col_input2 = st.columns(2)
         with col_input1:
-            skutocny_stav = st.number_input("Počet kusov vlastnených na T212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_pro_v20")
+            skutocny_stav = st.number_input("Počet kusov vlastnených na T212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_pro_v25")
         with col_input2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie (EUR):", min_value=0.0, value=0.0, step=0.01, format="%.2f", help="Zadajte dnešnú cenu z T212 pre výpočet teoretickej hodnoty safe predaja a reálneho čistého zisku.")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie (EUR):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v25")
         
-        # Rekonštrukcia aktuálneho skladu cez FIFO s uchovaním nákupnej ceny
+        # Rekonštrukcia aktuálneho skladu cez FIFO
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].copy()
         df_ticker = df_ticker.sort_values(by='Time').reset_index(drop=True)
         
@@ -123,7 +123,7 @@ if uploaded_files:
             ks_bez_dane = 0.0
             ks_mlade = 0.0
             vydavok_safe_balika = 0.0
-            odhadovany_vydavok_mlade = 0.0
+            vydavok_mladeho_balika = 0.0
             
             list_dat_nakupu = []
             list_mnozstiev = []
@@ -141,8 +141,8 @@ if uploaded_files:
                 
                 nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
                 vek_dni = (dnes.date() - nakup_pure.date()).days
-                
                 cena_balika = vziat_ks * n['cena_za_kus']
+                
                 list_dat_nakupu.append(nakup_pure.strftime('%d.%m.%Y'))
                 list_mnozstiev.append(f"{vziat_ks:.5f}")
                 list_povodna_cena.append(f"{n['cena_za_kus']:.2f} EUR")
@@ -156,7 +156,7 @@ if uploaded_files:
                     list_cakania.append("0 dní")
                 else:
                     ks_mlade += vziat_ks
-                    odhadovany_vydavok_mlade += cena_balika
+                    vydavok_mladeho_balika += cena_balika
                     list_stavov.append("🔴 Zdaňuje sa (Mladá akcia)")
                     list_dat_oslobodenia.append((nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y'))
                     list_cakania.append(f"⏳ {365 - vek_dni} dní")
@@ -167,19 +167,20 @@ if uploaded_files:
             
             c1, c2 = st.columns(2)
             
-            # 🔓 FAJNOTY: Dynamický výpočet teoretickej ceny a čistého zisku v EUR pre kamošov
+            # Zelená karta (Safe predaj)
             if aktualna_cena > 0:
                 teoreticka_hodnota_safe = ks_bez_dane * aktualna_cena
-                odhadovany_cisty_zisk_safe = teoreticka_hodnota_safe - vydavok_safe_balika
-                c1.metric(
-                    "Môžete predať IHNEĎ BEZ DANE", 
-                    f"{ks_bez_dane:.5f} ks", 
-                    f"Hodnota: {teoreticka_hodnota_safe:.2f} EUR (Čistý zisk: +{odhadovany_cisty_zisk_safe:.2f} EUR)",
-                    help="Tieto akcie držíte viac ako rok. Hodnota predaja aj čistý zisk nepodliehajú v SR žiadnemu zdaneniu."
-                )
+                odhadovany_zisk_safe = teoreticka_hodnota_safe - vydavok_safe_balika
+                c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**\nHodnota: {teoreticka_hodnota_safe:.2f} EUR (Čistý zisk: +{odhadovany_zisk_safe:.2f} EUR)")
             else:
-                c1.metric("Môžete predať IHNEĎ BEZ DANE", f"{ks_bez_dane:.5f} ks", help="Tieto akcie držíte viac ako rok. Sú oslobodené.")
+                c1.success(f"🔓 Môžete predať IHNEĎ BEZ DANE:\n**{ks_bez_dane:.5f} ks**")
             
+            # 🔓 ŽLTÁ KARTA VRÁTENÁ SPÄŤ NA SCÉNU S OPRAVENÝM PREPOČTOM V EUR
             if aktualna_cena > 0 and ks_mlade > 0:
                 prijem_mlade = ks_mlade * aktualna_cena
-                cistorocny_zisk = max(0.0, prijem_mlade - odhadovany_vydavok_mlade)
+                zisk_mlade = max(0.0, prijem_mlade - vydavok_mladeho_balika)
+                dan_mlade = round(zisk_mlade * 0.19, 2)
+                odvody_mlade = round(zisk_mlade * 0.14, 2)
+                celkova_hrozba = dan_mlade + odvody_mlade
+                c2.warning(f"🔒 MLADÉ FRAKCIE (Zdaňujú sa dnes):\n**{ks_mlade:.5f} ks**\nHrozí daň + odvody: {celkova_hrozba:.2f} EUR")
+            else:
