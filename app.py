@@ -16,7 +16,6 @@ if uploaded_files:
         zoznam_df.append(pd.read_csv(file))
         
     df = pd.concat(zoznam_df, ignore_index=True)
-    # BEZPEČNÝ PREVOD DÁTUMOV
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
@@ -143,7 +142,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: OPTIMALIZÁTOR - PREPOČET DÁTUMOV CEZ BEZPEČNÉ STRINGS
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - 100% POISTENÝ PROTI PRÁZDNYM STAVOM
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -162,33 +161,34 @@ if uploaded_files:
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu)
         vybrany_ticker = mapovanie[vybrany_text]
         
-        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne SKUTOČNE vidíte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_t212_v2")
+        skutocny_stav_mobil = st.number_input(f"Zadajte presný počet kusov {vybrany_ticker}, ktorý momentálne SKUTOČNE vidíte v platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="definitivny_vstup_t212_vFINAL")
         
         if skutocny_stav_mobil > 0:
-            nákupy_vsetky = sklad[vybrany_ticker]
-            nákupy_vsetky = sorted(nákupy_vsetky, key=lambda x: x['date'])
+            nákupy_vsetky = sklad.get(vybrany_ticker, [])
             
-            nákupy_skutocne = []
-            potrebne_ks = skutocny_stav_mobil
-            
-            for n in nákupy_vsetky:
-                if predat_este_check := (potrebne_ks <= 0):
-                    break
-                vziat_ks = min(n['shares'], predat_este_val := potrebne_ks)
-                nákupy_skutocne.append({'shares': vziat_ks, 'date': n['date']})
-                potrebne_ks -= vziat_ks
-            
-            dnes = datetime.now()
-            ks_bez_dane = 0.0
-            ks_mlade = 0.0
-            
-            list_dat_nakupu = []
-            list_mnozstiev = []
-            list_stavov = []
-            list_dat_oslobodenia = []
-            list_cakania = []
-            
-            for n in nákupy_skutocne:
-                # 💡 NEPRIESTRELNÝ PREPOČET ČASU CEZ KALENDÁRNE DNI (ZABRÁNI ZAMRZNUTIU PREHLIADAČA)
-                nakup_pure = pd.to_datetime(n['date']).to_pydatetime() if hasattr(n['date'], 'to_pydatetime') else n['date']
-                vek_dni = (dnes.date() - nakup_pure.date()).days
+            # 🛡️ POISTKA: Ak je sklad fyzicky prázdny kvôli predošlým predajom, kód nezamrzne
+            if not nákupy_vsetky:
+                st.info("V histórii nákupov pre tento ticker neboli nájdené žiadne otvorené balíčky. Skontrolujte zadané množstvo.")
+            else:
+                nákupy_vsetky = sorted(nákupy_vsetky, key=lambda x: x['date'])
+                nákupy_skutocne = []
+                potrebne_ks = skutocny_stav_mobil
+                
+                for n in nákupy_vsetky:
+                    if potrebne_ks <= 0:
+                        break
+                    vziat_ks = min(n['shares'], potrebne_ks)
+                    nákupy_skutocne.append({'shares': vziat_ks, 'date': n['date']})
+                    potrebne_ks -= vziat_ks
+                
+                dnes = datetime.now()
+                ks_bez_dane = 0.0
+                ks_mlade = 0.0
+                
+                list_dat_nakupu = []
+                list_mnozstiev = []
+                list_stavov = []
+                list_dat_oslobodenia = []
+                list_cakania = []
+                
+                for n in nákupy_skutocne:
