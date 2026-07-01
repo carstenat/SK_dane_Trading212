@@ -1,4 +1,4 @@
-import streamlit st
+import streamlit as st
 import pandas as pd
 import io
 from datetime import datetime
@@ -67,7 +67,6 @@ if uploaded_files:
             riadok_vydavok = 0.0
             
             if ticker in sklad and sklad[ticker]:
-                # BEZPEČNÝ CHROMATICKÝ SKOK (NULOVÉ RIZIKO ZACYKLENIA)
                 temp_sklad = list(sklad[ticker])
                 sklad[ticker] = []
                 
@@ -143,7 +142,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR - STABILNÁ VERZIA
+    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR S CHROMATICKOU DAŇOVOU TABUĽKOU
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -191,3 +190,4 @@ if uploaded_files:
                 list_cakania = []
                 
                 for n in nákupy_skutocne:
+                    nakup_pure = pd.to_datetime(n['date']).to_pydatetime() if hasattr(n['date'], 'to_pydatetime') else n['date']
