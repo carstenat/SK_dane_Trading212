@@ -66,7 +66,7 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker]
+                    najstarsie = sklad[ticker][0] # OPRAVENÉ: Berieme prvý nákup (index 0)
                     vek = datum - najstarsie['date']
                     splnil_rok = vek.days >= 365
                     
@@ -131,7 +131,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 OPTIMALIZÁTOR - OCHRANNÁ HRANICA POSUNUTÁ NA 5 EUR (Zmaže Ferrari prach)
+    # 🔥 OPTIMALIZÁTOR - BEZ PRACHU (HODNOTA NAD 5 EUR)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -141,7 +141,7 @@ if uploaded_files:
     for t in sklad.keys():
         if len(sklad[t]) > 0:
             odhad_hodnoty = sum(n['shares'] * n['cena_za_kus'] for n in sklad[t])
-            if odhad_hodnoty >= 5.0: # FILTROVANIE: Musíš držať pozíciu aspoň za 5 EUR
+            if odhad_hodnoty >= 5.0: # Filtrujeme preč prach pod 5 EUR
                 aktivne_tickery.append(t)
                 
     aktivne_tickery = sorted(aktivne_tickery)
@@ -172,7 +172,7 @@ if uploaded_files:
             podrobnosti_mlade = []
             
             for n in nákupy:
-                vek_dni = (dnes - n['date'].to_pydatetime()).days
+                vek_dni = (dnes - n['date'].to_pydatetime()).days if hasattr(n['date'], 'to_pydatetime') else (dnes - n['date']).days
                 if vek_dni >= 365:
                     ks_bez_dane += n['shares']
                 else:
