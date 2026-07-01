@@ -135,7 +135,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 2. KROK: BEZPEČNÝ OPTIMALIZÁTOR OVERENÝ STAVOM Z APLIKÁCIE TRADING 212
+    # 🔥 2. KROK: 100% BEZPEČNÝ OPTIMALIZÁTOR S CYKLOM FOR (NIKDY NEZAMRZNE)
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -163,15 +163,13 @@ if uploaded_files:
             nákupy_skutocne = []
             potrebne_ks = skutocny_stav_mobil
             
+            # PURE FLOV LOGIKA (BEZ SLUČKY WHILE) - PREBEHNE BEZPEČNE IBA RAZ
             for n in nákupy_vsetky:
                 if potrebne_ks <= 0:
-                    break
-                if n['shares'] <= potrebne_ks:
-                    nákupy_skutocne.append({'shares': n['shares'], 'date': n['date']})
-                    potrebne_ks -= n['shares']
-                else:
-                    nákupy_skutocne.append({'shares': potrebne_ks, 'date': n['date']})
-                    potrebne_ks = 0.0 # OPRAVENÉ: Absolútne čistá zmena premennej, slučka sa už nikdy nezasekne
+                    continue
+                vziat_ks = min(n['shares'], potrebne_ks)
+                nákupy_skutocne.append({'shares': vziat_ks, 'date': n['date']})
+                potrebne_ks -= vziat_ks
             
             dnes = datetime.now()
             ks_bez_dane = 0.0
@@ -191,3 +189,6 @@ if uploaded_files:
                         "Dátum oslobodenia": "Už oslobodené",
                         "Zostáva čakať": "0 dní (Voľný predaj)"
                     })
+                else:
+                    ks_mlade += n['shares']
+                    dni_cakat = 365 - vek_dni
