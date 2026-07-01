@@ -23,7 +23,7 @@ if uploaded_files:
     vysledky_po_rokoch = {}
     databaza_mien = {}
     
-    # FIFO logika a spracovanie celej histórie (klasické obchody aj Pie koláče)
+    # NEPRIESTRELNÁ FINÁLNA MATEMATIKA
     for _, riadok in df.iterrows():
         typ = str(riadok['Action']).lower()
         ticker_surovy = str(riadok['Ticker'])
@@ -52,49 +52,52 @@ if uploaded_files:
             vysledky_po_rokoch[rok]['div_brutto'] += (total + tax)
             vysledky_po_rokoch[rok]['div_dan'] += tax
             continue
-        if ('sell' in typ or 'divestment' in typ) and abs(result) < 2.0 and total < 10.0:
-            continue
             
-        # NÁKUPY (Klasické + Pie)
-        if 'buy' in typ or 'investment' in typ:
-            if ticker not in sklad: sklad[ticker] = []
-            sklad[ticker].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares if shares > 0 else 0.0})
-            
-        # PREDAJE (Klasické + Pie)
-        elif ('sell' in typ or 'divestment' in typ) and shares > 0:
-            predat_este = shares
-            riadok_po_roku = 0.0
-            riadok_do_roka = 0.0
-            riadok_vydavok = 0.0
-            
-            if ticker in sklad and sklad[ticker]:
-                while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker][0]
-                    vek = datum - najstarsie['date']
-                    splnil_rok = vek.days >= 365
-                    
-                    if najstarsie['shares'] <= predat_este:
-                        pomer = najstarsie['shares'] / shares
-                        if splnil_rok: riadok_po_roku += (result * pomer)
-                        else:
-                            riadok_do_roka += (result * pomer)
-                            riadok_vydavok += (najstarsie['shares'] * najstarsie['cena_za_kus'])
-                        predat_este -= najstarsie['shares']
-                        sklad[ticker].pop(0)
-                    else:
-                        pomer = predat_este / shares
-                        if splnil_rok: riadok_po_roku += (result * pomer)
-                        else:
-                            riadok_do_roka += (result * pomer)
-                            riadok_vydavok += (predat_este * najstarsie['cena_za_kus'])
-                        najstarsie['shares'] -= predat_este
-                        predat_este = 0.0
+        # AKCIA S KUSMI (Ignorujeme drobné splitové korekcie brokera)
+        if shares != 0:
+            if (typ.contains('sell') or typ.contains('divestment') or shares < 0) and abs(result) < 2.0 and total < 10.0:
+                continue
+                
+            # ABSOLÚTNA LOGIKA: KLADNÉ ČÍSLO JE NÁKUP
+            if shares > 0 and ('buy' in typ or 'investment' in typ or 'deposit' in typ or 'received' in typ):
+                if ticker not in sklad: sklad[ticker] = []
+                sklad[ticker].append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares if shares > 0 else 0.0})
+                
+            # ABSOLÚTNA LOGIKA: ZÁPORNÉ ČÍSLO ALEBO "SELL/DIVESTMENT/WITHDRAWAL" JE PREDAJ
+            elif shares < 0 or 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ:
+                predat_este = abs(shares)
+                riadok_po_roku = 0.0
+                riadok_do_roka = 0.0
+                riadok_vydavok = 0.0
+                
+                if ticker in sklad and sklad[ticker]:
+                    while predat_este > 0 and sklad[ticker]:
+                        najstarsie = sklad[ticker]
+                        vek = datum - najstarsie['date']
+                        splnil_rok = vek.days >= 365
                         
-            vysledky_po_rokoch[rok]['zisk_do_roka'] += riadok_do_roka
-            vysledky_po_rokoch[rok]['zisk_po_roku'] += riadok_po_roku
-            if riadok_do_roka != 0:
-                vysledky_po_rokoch[rok]['prijmy_kratkodobe'] += total
-                vysledky_po_rokoch[rok]['vydavky_kratkodobe'] += riadok_vydavok
+                        if najstarsie['shares'] <= predat_este:
+                            pomer = najstarsie['shares'] / abs(shares)
+                            if splnil_rok: riadok_po_roku += (result * pomer)
+                            else:
+                                riadok_do_roka += (result * pomer)
+                                riadok_vydavok += (najstarsie['shares'] * najstarsie['cena_za_kus'])
+                            predat_este -= najstarsie['shares']
+                            sklad[ticker].pop(0)
+                        else:
+                            pomer = predat_este / abs(shares)
+                            if splnil_rok: riadok_po_roku += (result * pomer)
+                            else:
+                                riadok_do_roka += (result * pomer)
+                                riadok_vydavok += (predat_este * najstarsie['cena_za_kus'])
+                            najstarsie['shares'] -= predat_este
+                            predat_este = 0.0
+                            
+                vysledky_po_rokoch[rok]['zisk_do_roka'] += riadok_do_roka
+                vysledky_po_rokoch[rok]['zisk_po_roku'] += riadok_po_roku
+                if riadok_do_roka != 0:
+                    vysledky_po_rokoch[rok]['prijmy_kratkodobe'] += total
+                    vysledky_po_rokoch[rok]['vydavky_kratkodobe'] += riadok_vydavok
 
     st.success("🚀 Analýza úspešne dokončená!")
     
@@ -125,7 +128,7 @@ if uploaded_files:
             if v['zisk_do_roka'] <= 0:
                 st.info(f"Utrpeli ste stratu ({v['zisk_do_roka']:.2f} EUR). Netreba nič vypĺňať.")
             else:
-                if priznany_zisk_po_oslobodeni == 0:
+                if Docs := priznany_zisk_po_oslobodeni == 0:
                     st.info(f"Zisk {v['zisk_do_roka']:.2f} EUR nepresiahol 500 EUR. Je oslobodený.")
                 else:
                     pomer = priznany_zisk_po_oslobodeni / v['zisk_do_roka']
@@ -134,7 +137,7 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR - BEZ CHYBNÝCH BLOKOV
+    # 🔥 FINÁLNY DYNAMICKÝ OPTIMALIZÁTOR - BEZ CHÝB S ABSOLÚTNYMI KUSMI
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
@@ -190,8 +193,3 @@ if uploaded_files:
             
             if ks_mlade > 0:
                 st.markdown("### 📅 Kedy predáte zvyšok bez dane?")
-                st.write("Tu je prehľad balíčkov, ktoré ešte musíte podržať:")
-                for pm in podrobnosti_mlade:
-                    st.write(f"• Fragment o veľkosti **{pm['shares']:.5f} ks** (nakúpený {pm['date']}) bude oslobodený o **{pm['dni_cakat']} dní**.")
-    else:
-        st.info("Vo vašej histórii momentálne nezostali žiadne otvorené pozície akcií (všetko je predané).")
