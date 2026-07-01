@@ -181,4 +181,3 @@ if uploaded_files:
         # VÝPOČET SA SPUSTÍ AŽ PO KLIKNUTÍ NA TLAČIDLO (STOP ZAMŔZANIU)
         if tlacidlo_spustenia and skutocny_stav_mobil > 0:
             ciste_nakupy_tickeru = []
-
