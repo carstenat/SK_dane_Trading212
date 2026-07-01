@@ -21,7 +21,7 @@ if uploaded_files:
     
     sklad = {}
     vysledky_po_rokoch = {}
-    databaza_mien = {} # Tu si aplikácia sama za behu vytvorí mapu Ticker -> Celé Meno
+    databaza_mien = {}
     
     # FIFO logika a spracovanie celej histórie
     for _, riadok in df.iterrows():
@@ -29,10 +29,8 @@ if uploaded_files:
         ticker_surovy = str(riadok['Ticker'])
         full_name = str(riadok.get('Name', 'Neznáma spoločnosť')).strip()
         
-        # Očistíme ticker od prípadných broker nápisov
         ticker = ticker_surovy.replace("US ", "").replace("_US", "").strip()
         
-        # DYNAMICKÉ MAPOVANIE: Ak nájdeme pekné meno v stĺpci Name, uložíme si ho
         if pd.notna(riadok.get('Name')) and ticker != 'nan' and ticker:
             if ticker not in databaza_mien or len(full_name) > len(databaza_mien[ticker]):
                 databaza_mien[ticker] = full_name
@@ -41,7 +39,7 @@ if uploaded_files:
         total = float(riadok['Total']) if pd.notna(riadok['Total']) else 0.0
         result = float(riadok['Result']) if pd.notna(riadok['Result']) else 0.0
         tax = float(riadok['Withholding tax']) if pd.notna(riadok['Withholding tax']) else 0.0
-        datum = riadok['Time']
+        datum = pd.to_datetime(riadok['Time']) # BEZPEČNOSTNÁ POISTKA NA FORMÁT DÁTUMU
         rok = datum.year
         
         if rok not in vysledky_po_rokoch:
@@ -68,8 +66,8 @@ if uploaded_files:
             
             if ticker in sklad and sklad[ticker]:
                 while predat_este > 0 and sklad[ticker]:
-                    najstarsie = sklad[ticker]
-                    vek = datum - najstarsie['date']
+                    najstarsie = sklad[ticker][0] # OPRAVENÉ: Presný index na prvý nákup v zozname
+                    vek = datum - pd.to_datetime(najstarsie['date']) # OPRAVENÉ: Bezpečný rozdiel dvoch časov
                     splnil_rok = vek.days >= 365
                     
                     if najstarsie['shares'] <= predat_este:
@@ -133,13 +131,12 @@ if uploaded_files:
                     st.write(f"**Zdravotné odvody (14%):** `{realne_odvody_akcie:.2f} EUR`")
 
     # =========================================================================
-    # 🔥 100% INTERAKTÍVNY OPTIMALIZÁTOR (Číta názvy priamo z CSV)
+    # 🔥 DYNAMICKÝ OPTIMALIZÁTOR PRE PREDAJ
     # =========================================================================
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     st.write("Aplikácia analyzovala váš skutočný aktuálny otvorený sklad k dnešnému dňu.")
     
-    # Vyberieme iba reálne otvorené pozície
     aktivne_tickery = sorted([t for t in sklad.keys() if len(sklad[t]) > 0 and sum(n['shares'] for n in sklad[t]) > 0.00001])
     
     if aktivne_tickery:
@@ -147,7 +144,6 @@ if uploaded_files:
         mapovanie = {}
         
         for t in aktivne_tickery:
-            # Vytiahneme meno dynamicky zo stiahnutého CSV
             plne_meno = databaza_mien.get(t, "Spoločnosť z CSV")
             text_polozky = f"{t} - {plne_meno}"
             ponuka_pre_menu.append(text_polozky)
@@ -169,7 +165,7 @@ if uploaded_files:
             podrobnosti_mlade = []
             
             for n in nákupy:
-                vek_dni = (dnes - n['date']).days
+                vek_dni = (dnes - pd.to_datetime(n['date'])).days
                 if vek_dni >= 365:
                     ks_bez_dane += n['shares']
                 else:
@@ -177,7 +173,7 @@ if uploaded_files:
                     dni_do_roka = 365 - vek_dni
                     podrobnosti_mlade.append({
                         'shares': n['shares'],
-                        'date': n['date'].strftime('%d.%m.%Y'),
+                        'date': pd.to_datetime(n['date']).strftime('%d.%m.%Y'),
                         'dni_cakat': dni_do_roka
                     })
             
@@ -187,7 +183,7 @@ if uploaded_files:
             
             if ks_mlade > 0:
                 st.markdown("### 📅 Kedy predáte zvyšok bez dane?")
-                st.write("Tu je prehľad balíčkov, ktoré ešte musíte plodovo podržať:")
+                st.write("Tu je prehľad balíčkov, ktoré ešte musíte podržať:")
                 for pm in podrobnosti_mlade:
                     st.write(f"• Fragment o veľkosti **{pm['shares']:.5f} ks** (nakúpený {pm['date']}) bude oslobodený o **{pm['dni_cakat']} dní**.")
     else:
