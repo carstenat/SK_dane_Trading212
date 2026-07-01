@@ -6,7 +6,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 PRO Daňový Asistent & Optimalizátor", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 🎨 PREPÍNAČ PRE DARK MODE (ČISTÉ CSS)
+# 🎨 ULTRA-KOMPAKTNÝ FINTECH LUXUSNÝ DIZAJN (PRE MOBIL, TABLET AJ DESKTOP)
 # =========================================================================
 st.sidebar.header("⚙️ Vzhľad a Vychytávky")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=True)
@@ -27,7 +27,7 @@ if dark_mode:
             padding: 12px 16px !important;
             box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1) !important;
         }
-        div[data-testid="stMetricValue"] { color: #38BDF8 !important; font-size: 20px !important; font-weight: 700 !important; }
+        div[data-testid="stMetricValue"] { color: #38BDF8 !important; font-size: 18px !important; font-weight: 700 !important; }
         div[data-testid="stMetricLabel"] { color: #94A3B8 !important; font-size: 12px !important; }
         
         .stTabs [data-baseweb="tab-list"] { background-color: #1E293B !important; border-radius: 10px; padding: 4px; gap: 4px; }
@@ -57,16 +57,15 @@ if uploaded_files:
     databaza_mien = {}
     for _, riadok in df.iterrows():
         tick_c = str(riadok['Ticker_Clean'])
-        full_name = str(riadok.get('Name', '')).strip()
+        full_name = str(riadok.get('Name', 'Simplified Asset')).strip()
         if tick_c and tick_c != 'nan' and full_name and full_name != 'nan':
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
                 databaza_mien[tick_c] = full_name
 
     # =========================================================================
-    # 🔥 1. ČASŤ: DAŇOVÝ OPTIMALIZÁTOR (NAVRCHU STRÁNKY)
+    # 🔥 1. ČASŤ: PROFESIONÁLNY DAŇOVÝ OPTIMALIZÁTOR PRED PREDAJOM
     # =========================================================================
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
-    st.write("Vyberte firmu zo zoznamu a zadajte aktuálny otvorený stav, ktorý vidíte v platforme Trading 212.")
     
     df_akcie = df[df['Action'].str.lower().str.contains('buy|investment|deposit|sell|divestment|withdrawal|rebalancing', na=False)].copy()
     zoznam_tickerov_all = sorted(list(df_akcie['Ticker_Clean'].unique()))
@@ -76,9 +75,8 @@ if uploaded_files:
         mapovanie_tickerov = {}
         for t in zoznam_tickerov_all:
             full_company_name = databaza_mien.get(t, "Spoločnosť z platformy")
-            text_riadku = f"{t} - {full_company_name}"
-            ponuka_pre_menu.append(text_riadku)
-            mapovanie_tickerov[text_riadku] = t
+            ponuka_pre_menu.append(f"{t} - {full_company_name}")
+            mapovanie_tickerov[f"{t} - {full_company_name}"] = t
             
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia:", ponuka_pre_menu)
@@ -86,11 +84,11 @@ if uploaded_files:
         
         col_input1, col_input2 = st.columns(2)
         with col_input1:
-            skutocny_stav = st.number_input("Počet kusov vlastnených na T212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_pro_v16")
+            skutocny_stav = st.number_input("Počet kusov vlastnených na T212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_pro_v20")
         with col_input2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie (EUR) - voliteľné:", min_value=0.0, value=0.0, step=0.01, format="%.2f", help="Zadajte dnešnú cenu z T212 pre výpočet očakávaného zisku a daňových dopadov.")
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie (EUR):", min_value=0.0, value=0.0, step=0.01, format="%.2f", help="Zadajte dnešnú cenu z T212 pre výpočet teoretickej hodnoty safe predaja a reálneho čistého zisku.")
         
-        # Rekonštrukcia aktuálneho skladu cez FIFO
+        # Rekonštrukcia aktuálneho skladu cez FIFO s uchovaním nákupnej ceny
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].copy()
         df_ticker = df_ticker.sort_values(by='Time').reset_index(drop=True)
         
@@ -124,11 +122,14 @@ if uploaded_files:
             dnes = datetime.now()
             ks_bez_dane = 0.0
             ks_mlade = 0.0
+            vydavok_safe_balika = 0.0
             odhadovany_vydavok_mlade = 0.0
             
             list_dat_nakupu = []
             list_mnozstiev = []
             list_stavov = []
+            list_povodna_cena = []
+            list_celkovy_nakup = []
             list_dat_oslobodenia = []
             list_cakania = []
             
@@ -141,17 +142,21 @@ if uploaded_files:
                 nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
                 vek_dni = (dnes.date() - nakup_pure.date()).days
                 
+                cena_balika = vziat_ks * n['cena_za_kus']
                 list_dat_nakupu.append(nakup_pure.strftime('%d.%m.%Y'))
                 list_mnozstiev.append(f"{vziat_ks:.5f}")
+                list_povodna_cena.append(f"{n['cena_za_kus']:.2f} EUR")
+                list_celkovy_nakup.append(f"{cena_balika:.2f} EUR")
                 
                 if vek_dni >= 365:
                     ks_bez_dane += vziat_ks
+                    vydavok_safe_balika += cena_balika
                     list_stavov.append("🟢 Bez dane (Nad 1 rok)")
                     list_dat_oslobodenia.append("Už oslobodené")
                     list_cakania.append("0 dní")
                 else:
                     ks_mlade += vziat_ks
-                    odhadovany_vydavok_mlade += (vziat_ks * n['cena_za_kus'])
+                    odhadovany_vydavok_mlade += cena_balika
                     list_stavov.append("🔴 Zdaňuje sa (Mladá akcia)")
                     list_dat_oslobodenia.append((nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y'))
                     list_cakania.append(f"⏳ {365 - vek_dni} dní")
@@ -161,22 +166,20 @@ if uploaded_files:
             st.progress(float(pomer_safe))
             
             c1, c2 = st.columns(2)
-            c1.metric("Môžete predať IHNEĎ BEZ DANE", f"{ks_bez_dane:.5f} ks", help="Tieto akcie držíte viac ako rok. Sú oslobodené.")
+            
+            # 🔓 FAJNOTY: Dynamický výpočet teoretickej ceny a čistého zisku v EUR pre kamošov
+            if aktualna_cena > 0:
+                teoreticka_hodnota_safe = ks_bez_dane * aktualna_cena
+                odhadovany_cisty_zisk_safe = teoreticka_hodnota_safe - vydavok_safe_balika
+                c1.metric(
+                    "Môžete predať IHNEĎ BEZ DANE", 
+                    f"{ks_bez_dane:.5f} ks", 
+                    f"Hodnota: {teoreticka_hodnota_safe:.2f} EUR (Čistý zisk: +{odhadovany_cisty_zisk_safe:.2f} EUR)",
+                    help="Tieto akcie držíte viac ako rok. Hodnota predaja aj čistý zisk nepodliehajú v SR žiadnemu zdaneniu."
+                )
+            else:
+                c1.metric("Môžete predať IHNEĎ BEZ DANE", f"{ks_bez_dane:.5f} ks", help="Tieto akcie držíte viac ako rok. Sú oslobodené.")
             
             if aktualna_cena > 0 and ks_mlade > 0:
                 prijem_mlade = ks_mlade * aktualna_cena
                 cistorocny_zisk = max(0.0, prijem_mlade - odhadovany_vydavok_mlade)
-                hrozba_dane = round(cistorocny_zisk * 0.19, 2)
-                hrozba_odvodov = round(cistorocny_zisk * 0.14, 2)
-                c2.metric("MLADÉ FRAKCIE (Hrozba daní)", f"{ks_mlade:.5f} ks", f"Hrozí daň + odvody: {hrozba_dane + hrozba_odvodov:.2f} EUR", delta_color="inverse", help="Ak držíte akcie kratšie ako rok, pri predaji dnes zaplatíte štátu 19% daň + 14% zdravotné odvody zo zisku.")
-            else:
-                c2.metric("MLADÉ FRAKCIE (Zdaňujú sa dnes)", f"{ks_mlade:.5f} ks", help="Akcie držíte kratšie ako rok. Pri predaji dnes zaplatíte 19% daň + 14% zdravotné odvody zo zisku.")
-            
-            st.markdown("### 📋 Detailný rozpis balíčkov na vašom sklade:")
-            tovarna_tabulky = pd.DataFrame({
-                "Dátum nákupu": list_dat_nakupu,
-                "Množstvo (ks)": list_mnozstiev,
-                "Daňový stav": list_stavov,
-                "Dátum oslobodenia": list_dat_oslobodenia,
-                "Zostáva čakať": list_cakania
-            })
