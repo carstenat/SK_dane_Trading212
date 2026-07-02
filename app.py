@@ -142,28 +142,26 @@ if st.session_state.databaza_transakcii is not None:
     otvorene_loty_portfolio = {}
     zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique()])
 
+    # 🌟 CRITICAL LOCK: Striktné oddelenie nákupov od predajov podľa typu operácie
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
         nakupne_loty = []
         
         for idx, row in df_t.iterrows():
-            množstvo = float(row['No. of shares'])
+            množstvo = abs(float(row['No. of shares']))
             total_val = float(row['Total'])
             akcia = str(row['Action_Clean'])
-            
-            # Detekcia smeru transakcie na základe textu transakcie
-            is_sell_action = ('sell' in akcia or 'predaj' in akcia)
-            is_buy_action = ('buy' in akcia or 'nákup' in akcia)
-            
-            # Výpočet ceny za kus
             cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
             
-            if is_buy_action and množstvo > 0:
+            is_sell_action = ('sell' in akcia or 'predaj' in akcia)
+            is_buy_action = ('buy' in akcia or 'nákup' in akcia or 'deposit' in akcia or 'vklad' in akcia)
+            
+            if is_buy_action and not is_sell_action:
                 nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']})
                 continue
                 
             if is_sell_action:
-                množstvo_na_predaj = abs(množstvo)
+                množstvo_na_predaj = množstvo
                 for i in range(len(nakupne_loty)):
                     if nakupne_loty[i]['množstvo'] <= 0 or množstvo_na_predaj <= 0:
                         continue
