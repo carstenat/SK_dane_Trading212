@@ -142,7 +142,6 @@ if st.session_state.databaza_transakcii is not None:
     otvorene_loty_portfolio = {}
     zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique()])
 
-    # 🌟 LINEÁRNY PLOCHÝ FIFO KÓD: Úplná eliminácia medzerových chýb a vnorených blokov
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
         nakupne_loty = []
@@ -151,30 +150,37 @@ if st.session_state.databaza_transakcii is not None:
             množstvo = float(row['No. of shares'])
             total_val = float(row['Total'])
             akcia = str(row['Action_Clean'])
+            
+            # Detekcia smeru transakcie na základe textu transakcie
+            is_sell_action = ('sell' in akcia or 'predaj' in akcia)
+            is_buy_action = ('buy' in akcia or 'nákup' in akcia)
+            
+            # Výpočet ceny za kus
             cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
             
-            if množstvo > 0 or 'buy' in akcia:
+            if is_buy_action and množstvo > 0:
                 nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']})
                 continue
                 
-            množstvo_na_predaj = abs(množstvo)
-            for i in range(len(nakupne_loty)):
-                if nakupne_loty[i]['množstvo'] <= 0 or množstvo_na_predaj <= 0:
-                    continue
-                odpredane = min(nakupne_loty[i]['množstvo'], množstvo_na_predaj)
-                nakupne_loty[i]['množstvo'] -= odpredane
-                množstvo_na_predaj -= odpredane
-                
-                zisk = (odpredane * cena_ks) - (odpredane * nakupne_loty[i]['cena_nakup'])
-                dni = (row['Time'] - nakupne_loty[i]['datum_nakup']).days
-                oslobodene = (dni >= 365)
-                
-                if st.session_state.vybrany_rok == "Všetky" or row['Rok'] == int(st.session_state.vybrany_rok):
-                    realizovane_obchody_rok.append({
-                        'Ticker': t, 'Spoločnosť': databaza_mien.get(t, "Neznáma"), 'Kusy': odpredane,
-                        'Zisk/Strata': zisk, 'Oslobodené': "Áno" if oslobodene else "Nie",
-                        'Zdaniteľný Zisk': 0.0 if oslobodene else (zisk if zisk > 0 else 0.0)
-                    })
+            if is_sell_action:
+                množstvo_na_predaj = abs(množstvo)
+                for i in range(len(nakupne_loty)):
+                    if nakupne_loty[i]['množstvo'] <= 0 or množstvo_na_predaj <= 0:
+                        continue
+                    odpredane = min(nakupne_loty[i]['množstvo'], množstvo_na_predaj)
+                    nakupne_loty[i]['množstvo'] -= odpredane
+                    množstvo_na_predaj -= odpredane
+                    
+                    zisk = (odpredane * cena_ks) - (odpredane * nakupne_loty[i]['cena_nakup'])
+                    dni = (row['Time'] - nakupne_loty[i]['datum_nakup']).days
+                    oslobodene = (dni >= 365)
+                    
+                    if st.session_state.vybrany_rok == "Všetky" or row['Rok'] == int(st.session_state.vybrany_rok):
+                        realizovane_obchody_rok.append({
+                            'Ticker': t, 'Spoločnosť': databaza_mien.get(t, "Neznáma"), 'Kusy': odpredane,
+                            'Zisk/Strata': zisk, 'Oslobodené': "Áno" if oslobodene else "Nie",
+                            'Zdaniteľný Zisk': 0.0 if oslobodene else (zisk if zisk > 0 else 0.0)
+                        })
         otvorene_loty_portfolio[t] = [lot for lot in nakupne_loty if lot['množstvo'] > 0.000001]
 
     if len(realizovane_obchody_rok) == 0:
@@ -193,9 +199,3 @@ if st.session_state.databaza_transakcii is not None:
     st.markdown("---")
     st.header("🎯 Pokročilý FIFO Optimalizátor otvorených šarží")
     
-    zoznam_otvorenych_tickerov = sorted([str(k) for k, v in otvorene_loty_portfolio.items() if len(v) > 0 and k != 'UNKNOWN' and k != 'NAN'])
-
-    if len(zoznam_otvorenych_tickerov) > 0:
-        polozky_pre_select = []
-        for t in zoznam_otvorenych_tickerov:
-            nazov_firmy = str(databaza_mien.get(t, "Neznámy názov"))
