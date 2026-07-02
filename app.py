@@ -39,7 +39,7 @@ if uploaded_files:
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🔍 NEPRIESTRELNÉ UNIVERZÁLNE MAPOVANIE VARIÁCIÍ STĹPCOV
+    # 🔍 UNIVERZÁLNE MAPOVANIE VARIÁCIÍ STĹPCOV
     mapovanie_stlpcov = {}
     flags = {"time": False, "action": False, "ticker": False, "name": False, "shares": False, "price": False, "total": False, "wht": False}
     
@@ -49,7 +49,6 @@ if st.session_state.databaza_transakcii is not None:
             mapovanie_stlpcov[c] = 'Time'
             flags["time"] = True
         elif ('action' in c_low or 'operácia' in c_low or 'typ' in c_low) and not flags["action"]:
-            mapoverride = 'Action'
             mapovanie_stlpcov[c] = 'Action'
             flags["action"] = True
         elif ('ticker' in c_low or 'symbol' in c_low) and not flags["ticker"]:
@@ -129,7 +128,7 @@ if st.session_state.databaza_transakcii is not None:
             st.metric("Pripísané denné úroky (Brutto)", f"{total_interest_brutto:.2f} EUR")
             st.metric("Daňová povinnosť v SR (19%)", f"{total_interest_brutto * 0.19:.2f} EUR")
         else:
-            st.info("Žiadne úroky z hotovosti.")
+            st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
 
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
@@ -150,7 +149,7 @@ if st.session_state.databaza_transakcii is not None:
     otvorene_loty_portfolio = {}
     zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique() if t and t != 'UNKNOWN'])
 
-    # 🌟 STOPERCENTNE MATEMATICKY FIFO ENGINE Z RETROSPEKTÍVY
+    # 🌟 HISTORICKY PRESNÝ A POCTIVÝ FIFO ENGINE
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
         nakupne_loty = []
@@ -164,7 +163,6 @@ if st.session_state.databaza_transakcii is not None:
             is_buy = ('buy' in akcia or 'nákup' in akcia or 'nakup' in akcia)
             
             if is_buy and not is_sell:
-                # Ukladáme samostatný lot: zostávajúce_množstvo, nákupná_cena, dátum, pôvodný_objem
                 nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time'], 'pôvodné': množstvo})
                 continue
                 
@@ -178,10 +176,10 @@ if st.session_state.databaza_transakcii is not None:
                     nakupne_loty[i]['množstvo'] -= odpredane
                     množstvo_na_predaj -= odpredane
                     
-                    # FIFO Výpočet zisku: (Predajná_Cena - Nákupná_Cena_Z_Lotu) * Odpredané_Kusy
+                    # Čistý zisk z tohto konkrétneho uzavretého lotu
                     čistý_zisk = (cena_ks - nakupne_loty[i]['cena_nakup']) * odpredane
                     
-                    # Overenie skutočného časového testu (Dátum predaja - Dátum nákupu z lotu)
+                    # Vek šarže určený ako: Dátum predaja - Dátum nákupu z lotu
                     dni_drzania = (row['Time'] - nakupne_loty[i]['datum_nakup']).days
                     oslobodene = (dni_drzania >= 365)
                     
@@ -195,3 +193,8 @@ if st.session_state.databaza_transakcii is not None:
                             'Dni držania': f"{dni_drzania} dní",
                             'Zisk/Strata (EUR)': čistý_zisk, 
                             'Oslobodené': "Áno (Časový test OK)" if oslobodene else "Nie (Podlieha dani)",
+                            'Zdaniteľný Zisk': 0.0 if oslobodene else (čistý_zisk if čistý_zisk > 0 else 0.0)
+                        })
+        otvorene_loty_portfolio[t] = nakupne_loty
+
+    if len(realizovane_obchody_rok) == 0:
