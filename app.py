@@ -161,17 +161,17 @@ if st.session_state.databaza_transakcii is not None:
         for t in zoznam_tickerov:
             meno_firmy = databaza_mien.get(t, "Neznámy titul")
             retazec = f"{t} - {meno_firmy}"
-            mapovanie_zobrazenia[retazec] = (t, meno_firmy)
+            mapovanie_zobrazenia[retazec] = t
             list_prvkov.append(retazec)
             
         # 🔀 Bezpečné abecedné zoradenie podľa vybranej preferencie
         if metoda_zoradenia == "Názvu spoločnosti abecedne":
-            list_na_zobrazenie = sorted(list_prvkov, key=lambda x: mapovanie_zobrazenia[x][1].lower())
+            list_na_zobrazenie = sorted(list_prvkov, key=lambda x: x.split(" - ")[1].lower())
         else:
-            list_na_zobrazenie = sorted(list_prvkov, key=lambda x: mapovanie_zobrazenia[x][0].lower())
+            list_na_zobrazenie = sorted(list_prvkov, key=lambda x: x.split(" - ")[0].lower())
             
         vybrany_text = st.selectbox("Vyberte akciu alebo ETF (môžete do okna priamo písať a hľadať):", list_na_zobrazenie)
-        skutocny_ticker = mapovanie_zobrazenia[vybrany_text][0]
+        skutocny_ticker = mapovanie_zobrazenia[vybrany_text]
         
         df_ticker = df[df['Ticker_Clean'] == skutocny_ticker].copy()
         st.subheader(f"FIFO analýza lotov pre: {vybrany_text}")
@@ -191,9 +191,8 @@ if st.session_state.databaza_transakcii is not None:
             if 'buy' in akcia:
                 if kusy > 0.00001:
                     cena_jednotkova = celkovy_objem / kusy
-                    novy_lot = {
-                        "Time": cas_tx,
-                        "Kusy_Povodny": kusy,
-                        "Kusy_Zostatok": kusy,
-                        "Total_Cena": celkovy_objem,
-                        "Cena_Za_Kus": cena_jednotkova,
+                    # Lineárny line-by-line zápis cez dict() na zamedzenie SyntaxError
+                    novy_lot = dict()
+                    novy_lot["Time"] = cas_tx
+                    novy_lot["Kusy_Povodny"] = kusy
+                    novy_lot["Kusy_Zostatok"] = kusy
