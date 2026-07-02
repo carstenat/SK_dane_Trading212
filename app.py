@@ -28,7 +28,7 @@ else:
     """, unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
+st.write("Profesionálny Nástroj na kontrolu časového testu pred predajom akcií.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True, key="uploader_main_final")
 
@@ -161,7 +161,7 @@ if uploaded_files:
         ks_mlade = round(ks_mlade, 5)
         
         # =========================================================================
-        # 📊 VIZUÁLNY PROGRESS BAR
+        # 📊 VIZUÁLNY PROGRESS BAR & KARTY
         # =========================================================================
         if skutocny_stav > 0:
             vypocitany_pomer = float(ks_bez_dane / skutocny_stav)
@@ -180,10 +180,8 @@ if uploaded_files:
             odvody_risk = max(0.0, hruby_zisk_risk * 0.14)
             cisty_zisk_risk = hruby_zisk_risk - dan_risk - odvody_risk
             
-            # Výkaz kariet
             col_karta1, col_karta2 = st.columns(2)
             
-            # 🟢 ZELENÁ KARTA ÚSPECHU
+            # Bezpečné generovanie textov bez použitia citlivých triple-quoted f-stringov v HTML/Markdown kontajneri
             with col_karta1:
-                st.success(f"""
-                ### 🟢 Zelená karta úspechu (Oslobodené)
+                st.success(
