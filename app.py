@@ -5,16 +5,12 @@ import re
 
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
-# =========================================================================
-# 💾 TRVALÁ PAMÄŤ CLOUDU (OCHRANA PRED RESETOM SÚBOROV)
-# =========================================================================
 if "databaza_transakcii" not in st.session_state:
     st.session_state.databaza_transakcii = None
 
 if "vybrany_rok" not in st.session_state:
     st.session_state.vybrany_rok = "Všetky"
 
-# Funkcia na bezpečné očistenie textu na čisté float číslo (Odstraňuje EUR, USD, textové meny)
 def bezpecne_cislo(hodnota):
     if pd.isna(hodnota):
         return 0.0
@@ -28,23 +24,6 @@ def bezpecne_cislo(hodnota):
         return float(text)
     except:
         return 0.0
-
-# =========================================================================
-# 🎨 PRÉMIOVÝ FINTECH VZHĽAD A SIDEBAR
-# =========================================================================
-st.sidebar.header("⚙️ Nastavenia vzhľadu")
-dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
-
-st.sidebar.header("🔀 Nastavenia zoznamu akcií")
-metoda_zoradenia = st.sidebar.radio(
-    "Zoradiť zoznam spoločností podľa:",
-    options=["Tickeru abecedne", "Názvu spoločnosti abecedne"]
-)
-
-if dark_mode:
-    st.markdown("<style>.stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; } h1, h2, h3, label, p, span { color: #FFFFFF !important; } div[data-testid='stMetric'] { background-color: #1E293B !important; border: 2px solid #475569 !important; border-radius: 12px !important; padding: 14px 18px !important; }</style>", unsafe_allow_html=True)
-else:
-    st.markdown("<style>.stApp { background-color: #FFFFFF !important; color: #1E293B !important; } h1, h2 { color: #0F172A !important; } div[data-testid='stMetric'] { background-color: #F8FAFC !important; border: 2px solid #CBD5E1 !important; border-radius: 12px !important; padding: 14px 18px !important; }</style>", unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
 st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
@@ -60,7 +39,6 @@ if uploaded_files:
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🔍 UNIVERZÁLNE MAPOVANIE VARIÁCIÍ STĹPCOV (SK / EN)
     mapovanie_stlpcov = {}
     flags = {"time": False, "action": False, "ticker": False, "name": False, "shares": False, "price": False, "total": False, "wht": False}
     
@@ -106,12 +84,11 @@ if st.session_state.databaza_transakcii is not None:
     df['Rok'] = df['Time'].dt.year
     df['Action_Clean'] = df['Action'].fillna('').astype(str).str.strip().str.lower()
 
-    # =========================================================================
-    # 📅 MODUL SELEKCIE DAŇOVÉHO OBDOBIA
-    # =========================================================================
     st.markdown("---")
+    st.sidebar.header("🔀 Nastavenia zoznamu akcií")
+    metoda_zoradenia = st.sidebar.radio("Zoradiť zoznam spoločností podľa:", options=["Tickeru abecedne", "Názvu spoločnosti abecedne"])
+
     st.subheader("📅 Výber daňového obdobia na kontrolu")
-    
     roky_v_datach = sorted([int(r) for r in df['Rok'].dropna().unique()])
     moznosti_rokov = ["Všetky"] + [str(r) for r in roky_v_datach]
     
@@ -123,14 +100,8 @@ if st.session_state.databaza_transakcii is not None:
                 st.session_state.vybrany_rok = r_opt
                 st.rerun()
 
-    if st.session_state.vybrany_rok == "Všetky":
-        df_filtrovane = df.copy()
-    else:
-        df_filtrovane = df[df['Rok'] == int(st.session_state.vybrany_rok)].copy()
+    df_filtrovane = df.copy() if st.session_state.vybrany_rok == "Všetky" else df[df['Rok'] == int(st.session_state.vybrany_rok)].copy()
 
-    # =========================================================================
-    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY
-    # =========================================================================
     df_dividendy = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('dividend', na=False)].copy()
     df_uroky = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('interest', na=False)].copy()
     
@@ -144,7 +115,7 @@ if st.session_state.databaza_transakcii is not None:
             st.metric("Zahraničná zrazená daň (WHT)", f"{total_div_wht:.2f} EUR")
             st.write(f"**Čisté dividendy:** {total_div_gross - total_div_wht:.2f} EUR")
         else:
-            st.info("Pre zvolené obdobie sa nenašli žiadne dividendy.")
+            st.info("Žiadne dividendy.")
             
     with col_int:
         st.header(f"💶 Modul Úrokov ({st.session_state.vybrany_rok})")
@@ -153,30 +124,25 @@ if st.session_state.databaza_transakcii is not None:
             st.metric("Pripísané denné úroky (Brutto)", f"{total_interest_brutto:.2f} EUR")
             st.metric("Daňová povinnosť v SR (19%)", f"{total_interest_brutto * 0.19:.2f} EUR")
         else:
-            st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
+            st.info("Žiadne úroky z hotovosti.")
 
-    # =========================================================================
-    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (STABILNÝ FIFO ENGINE)
-    # =========================================================================
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
     df_akcie_len = df.dropna(subset=['Time', 'Ticker']).copy()
     df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
     df_akcie_len = df_akcie_len[(df_akcie_len['Ticker_Clean'] != '') & (df_akcie_len['Ticker_Clean'] != 'NONE') & (df_akcie_len['Ticker_Clean'] != 'NAN')]
-    df_akcie_len = df_akcie_len.sort_values(by='Time').reset_index(drop=True)
+    df_akcie_len = df_akcie_len[~df_akcie_len['Action_Clean'].str.contains('dividend|interest', na=False)].sort_values(by='Time').reset_index(drop=True)
     
     databaza_mien = {}
     for _, riadok in df_akcie_len.iterrows():
-        tick_c = riadok['Ticker_Clean']
-        if tick_c and tick_c != 'UNKNOWN':
-            databaza_mien[tick_c] = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
+        databaza_mien[riadok['Ticker_Clean']] = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
 
-    zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique() if t != 'UNKNOWN'])
-    
     realizovane_obchody_rok = []
     otvorene_loty_portfolio = {}
+    zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique()])
 
+    # 🌟 LINEÁRNY PLOCHÝ FIFO KÓD: Úplná eliminácia medzerových chýb a vnorených blokov
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
         nakupne_loty = []
@@ -185,16 +151,51 @@ if st.session_state.databaza_transakcii is not None:
             množstvo = float(row['No. of shares'])
             total_val = float(row['Total'])
             akcia = str(row['Action_Clean'])
-            
-            if 'dividend' in akcia or 'interest' in akcia or množstvo == 0:
-                continue
-                
             cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
             
-            if 'buy' in akcia or 'nákup' in akcia or množstvo > 0:
+            if množstvo > 0 or 'buy' in akcia:
                 nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']})
+                continue
                 
-            if 'sell' in akcia or 'predaj' in akcia or množstvo < 0:
-                množstvo_na_predaj = abs(množstvo)
-                for lot in list(nakupne_loty):
-                    if lot['množstvo'] <= 0 or množstvo_na_predaj <= 0:
+            množstvo_na_predaj = abs(množstvo)
+            for i in range(len(nakupne_loty)):
+                if nakupne_loty[i]['množstvo'] <= 0 or množstvo_na_predaj <= 0:
+                    continue
+                odpredane = min(nakupne_loty[i]['množstvo'], množstvo_na_predaj)
+                nakupne_loty[i]['množstvo'] -= odpredane
+                množstvo_na_predaj -= odpredane
+                
+                zisk = (odpredane * cena_ks) - (odpredane * nakupne_loty[i]['cena_nakup'])
+                dni = (row['Time'] - nakupne_loty[i]['datum_nakup']).days
+                oslobodene = (dni >= 365)
+                
+                if st.session_state.vybrany_rok == "Všetky" or row['Rok'] == int(st.session_state.vybrany_rok):
+                    realizovane_obchody_rok.append({
+                        'Ticker': t, 'Spoločnosť': databaza_mien.get(t, "Neznáma"), 'Kusy': odpredane,
+                        'Zisk/Strata': zisk, 'Oslobodené': "Áno" if oslobodene else "Nie",
+                        'Zdaniteľný Zisk': 0.0 if oslobodene else (zisk if zisk > 0 else 0.0)
+                    })
+        otvorene_loty_portfolio[t] = [lot for lot in nakupne_loty if lot['množstvo'] > 0.000001]
+
+    if len(realizovane_obchody_rok) == 0:
+        st.info(f"ℹ️ V daňovom období '{st.session_state.vybrany_rok}' ste nerealizovali žiadne predaje akcií.")
+        zdanitelny_zisk_celkom = 0.0
+    else:
+        df_realizovane = pd.DataFrame(realizovane_obchody_rok)
+        st.dataframe(df_realizovane, use_container_width=True)
+        zdanitelny_zisk_celkom = max(0.0, df_realizovane['Zdaniteľný Zisk'].sum())
+
+    col_m1, col_m2, col_m3 = st.columns(3)
+    with col_m1: st.metric("Krátkodobý zdaniteľný zisk", f"{zdanitelny_zisk_celkom:,.2f} EUR")
+    with col_m2: st.metric("Daň z príjmu (19%)", f"{zdanitelny_zisk_celkom * 0.19:,.2f} EUR")
+    with col_m3: st.metric("Zdravotné odvody (15%)", f"{zdanitelny_zisk_celkom * 0.15:,.2f} EUR")
+
+    st.markdown("---")
+    st.header("🎯 Pokročilý FIFO Optimalizátor otvorených šarží")
+    
+    zoznam_otvorenych_tickerov = sorted([str(k) for k, v in otvorene_loty_portfolio.items() if len(v) > 0 and k != 'UNKNOWN' and k != 'NAN'])
+
+    if len(zoznam_otvorenych_tickerov) > 0:
+        polozky_pre_select = []
+        for t in zoznam_otvorenych_tickerov:
+            nazov_firmy = str(databaza_mien.get(t, "Neznámy názov"))
