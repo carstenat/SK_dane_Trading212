@@ -5,6 +5,72 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
 # =========================================================================
+# 🧮 IZOLOVANÝ A ROBUSTNÝ FIFO ENGINE (Ochrana pred IndentationError)
+# =========================================================================
+def spracuj_fifo_enginom(df_akcie, vybrany_rok, databaza_mien):
+    realizovane_obchody = []
+    otvorene_loty = {}
+    
+    zoznam_tickerov = sorted([t for t in df_akcie['Ticker_Clean'].unique()])
+    
+    for t in zoznam_tickerov:
+        df_t = df_akcie[df_akcie['Ticker_Clean'] == t].copy()
+        nakupne_loty = []
+        
+        for idx, row in df_t.iterrows():
+            akcia = str(row['Action_Clean'])
+            množstvo = float(row['No. of shares'])
+            total_val = float(row['Total'])
+            cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
+            
+            # Spracovanie nákupu
+            if 'buy' in akcia or 'nákup' in akcia or 'nakup' in akcia:
+                nakupne_loty.append({
+                    'množstvo': množstvo,
+                    'cena_nakup': cena_ks,
+                    'datum_nakup': row['Time']
+                })
+                continue
+                
+            # Spracovanie predaja
+            if 'sell' in akcia or 'predaj' in akcia:
+                množstvo_na_predaj = množstvo
+                
+                while množstvo_na_predaj > 0 and len(nakupne_loty) > 0:
+                    aktualny_lot = nakupne_loty[0]
+                    
+                    if aktualny_lot['množstvo'] <= množstvo_na_predaj:
+                        odpredane_množstvo = aktualny_lot['množstvo']
+                        množstvo_na_predaj -= odpredane_množstvo
+                        nakupne_loty.pop(0)
+                    else:
+                        odpredane_množstvo = množstvo_na_predaj
+                        aktualny_lot['množstvo'] -= odpredane_množstvo
+                        množstvo_na_predaj = 0
+                        
+                    prijem = odpredane_množstvo * cena_ks
+                    vydaj = odpredane_množstvo * aktualny_lot['cena_nakup']
+                    zisk_z_predaja = prijem - vydaj
+                    
+                    dni_drzania = (row['Time'] - aktualny_lot['datum_nakup']).days
+                    oslobodene = (dni_drzania >= 365)
+                    
+                    # Overenie roku filtrácie
+                    if vybrany_rok == "Všetky" or row['Rok'] == int(vybrany_rok):
+                        realizovane_obchody.append({
+                            'Ticker': t,
+                            'Spoločnosť': databaza_mien.get(t, "Neznáma"),
+                            'Kusy': odpredane_množstvo,
+                            'Zisk/Strata': zisk_z_predaja,
+                            'Oslobodené': "Áno (Časový test)" if oslobodene else "Nie (Podlieha dani)",
+                            'Zdaniteľný Zisk': 0.0 if oslobodene else zisk_z_predaja
+                        })
+                        
+        otvorene_loty[t] = [lot for lot in nakupne_loty if lot['množstvo'] > 0.000001]
+        
+    return realizovane_obchody, otvorene_loty
+
+# =========================================================================
 # 💾 TRVALÁ PAMÄŤ CLOUDU (OCHRANA PRED RESETOM SÚBOROV)
 # =========================================================================
 if "databaza_transakcii" not in st.session_state:
@@ -14,12 +80,12 @@ if "vybrany_rok" not in st.session_state:
     st.session_state.vybrany_rok = "Všetky"
 
 # =========================================================================
-# 🎨 PRÉMIOVÝ FINTECH VZHĽAD A NASTAVENIA ZORADENIA
+# 🎨 PRÉMIOVÝ FINTECH VZHĽAD A SIDEBAR
 # =========================================================================
 st.sidebar.header("⚙️ Nastavenia vzhľadu")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
 
-st.sidebar.header("🔀 Nastavenia zoznamu akcií")
+st.sidebar.header("🔀 Nastavenia zoznamu акций")
 metoda_zoradenia = st.sidebar.radio(
     "Zoradiť zoznam spoločností podľa:",
     options=["Tickeru abecedne", "Názvu spoločnosti abecedne"]
@@ -44,7 +110,7 @@ if uploaded_files:
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🔍 UNIVERZÁLNE PREMENOVANIE STĹPCOV - Ochrana pred duplicitnými stĺpcami (napr. Total vs Total (EUR))
+    # 🔍 UNIVERZÁLNE PREMENOVANIE STĹPCOV - Ochrana pred prepísaním dát
     mapovanie_stlpcov = {}
     najdeny_shares = False
     najdeny_total = False
@@ -69,11 +135,10 @@ if st.session_state.databaza_transakcii is not None:
     
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df['Rok'] = df['Time'].dt.year
-    
     df['Action_Clean'] = df['Action'].fillna('').astype(str).str.strip().str.lower()
-    
+
     # =========================================================================
-    # 📅 MODUL SELEKCIE DAŇOVÉHO OBDOBIA (Tlačidlá)
+    # 📅 MODUL SELEKCIE DAŇOVÉHO OBDOBIA
     # =========================================================================
     st.markdown("---")
     st.subheader("📅 Výber daňového obdobia na kontrolu")
@@ -132,62 +197,3 @@ if st.session_state.databaza_transakcii is not None:
             with st.expander("Zobraziť históriu pripísaných úrokov pre toto obdobie"):
                 st.dataframe(df_uroky[['Time', 'Total']].head(100))
         else:
-            st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
-
-    # Safe-typing pre matematické operácie na akcie
-    df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
-    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
-
-    # =========================================================================
-    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (VÝPOČET PRE VŠETKY TICKERY CEZ FIFO)
-    # =========================================================================
-    st.markdown("---")
-    st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
-    
-    # Čistenie riadkov a filtrovanie cez dropna len pre potreby FIFO
-    df_akcie_len = df.dropna(subset=['Time', 'Ticker']).copy()
-    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
-    df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != '']
-    df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != 'NAN'].sort_values(by='Time').reset_index(drop=True)
-    
-    # Generovanie databázy mien
-    databaza_mien = {}
-    for _, riadok in df_akcie_len.iterrows():
-        tick_c = riadok['Ticker_Clean']
-        full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
-        if full_name and full_name != 'nan':
-            if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
-                databaza_mien[tick_c] = full_name
-
-    zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique()])
-    
-    realizovane_obchody_rok = []
-    otvorene_loty_portfolio = {}
-
-    for t in zoznam_tickerov_vsetky:
-        df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
-        nakupne_loty = []
-        
-        for idx, row in df_t.iterrows():
-            akcia = str(row['Action_Clean'])
-            množstvo = float(row['No. of shares'])
-            total_val = float(row['Total'])
-            cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
-            
-            # 🌟 UNIVERZÁLNY FIX: Akceptuje nákup v angličtine aj slovenčine (buy, market buy, nákup...)
-            if 'buy' in akcia or 'nákup' in akcia or 'nakup' in akcia:
-                lot = {'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']}
-                nakupne_loty.append(lot)
-                
-            # 🌟 UNIVERZÁLNY FIX: Akceptuje predaj v angličtine aj slovenčine (sell, market sell, predaj...)
-            elif 'sell' in akcia or 'predaj' in akcia:
-                množstvo_na_predaj = množstvo
-                
-                while množstvo_na_predaj > 0 and len(nakupne_loty) > 0:
-                    aktualny_lot = nakupne_loty[0]
-                    
-                    if aktualny_lot['množstvo'] <= množstvo_na_predaj:
-                        odpredane_množstvo = aktualny_lot['množstvo']
-                        množstvo_na_predaj -= odpredane_množstvo
-                        nakupne_loty.pop(0)
-                    else:
