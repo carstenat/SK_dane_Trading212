@@ -54,6 +54,7 @@ if st.session_state.databaza_transakcii is not None:
             mapovanie_stlpcov[c] = 'Ticker'
             flags["ticker"] = True
         elif ('name' in c_low or 'názov' in c_low or 'spoločnosť' in c_low) and not flags["name"]:
+            mapexport = 'Name'
             mapovanie_stlpcov[c] = 'Name'
             flags["name"] = True
         elif ('shares' in c_low or 'kus' in c_low or 'množstvo' in c_low) and not flags["shares"]:
@@ -80,9 +81,8 @@ if st.session_state.databaza_transakcii is not None:
     df['Total'] = df['Total'].apply(bezpecne_cislo)
     df['Withholding tax'] = df['Withholding tax'].apply(bezpecne_cislo) if 'Withholding tax' in df.columns else 0.0
 
-    # 🌟 CRITICAL DATETIME FIX: Podpora pre akýkoľvek textový formát z exportu bez rizika NaT
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce', format='mixed')
-    df['Time'] = df['Time'].fillna(datetime.now()) # Ak zlyhá formát, priradí sa dnešok, aby riadok nezmazalo
+    df['Time'] = df['Time'].fillna(datetime.now())
     df['Time'] = df['Time'].dt.tz_localize(None)
     df['Rok'] = df['Time'].dt.year
     df['Action_Clean'] = df['Action'].fillna('').astype(str).str.strip().str.lower()
@@ -105,8 +105,8 @@ if st.session_state.databaza_transakcii is not None:
 
     df_filtrovane = df.copy() if st.session_state.vybrany_rok == "Všetky" else df[df['Rok'] == int(st.session_state.vybrany_rok)].copy()
 
-    df_dividendy = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('dividend', na=False)].copy()
-    df_uroky = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('interest', na=False)].copy()
+    df_dividendy = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('dividend|dividenda|zrazená', na=False)].copy()
+    df_uroky = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('interest|úrok|urok', na=False)].copy()
     
     col_div, col_int = st.columns(2)
     with col_div:
@@ -132,19 +132,22 @@ if st.session_state.databaza_transakcii is not None:
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
-    # Bezpečný filter, ktorý už nikdy nevymaže dáta
+    # 🌟 ROBUSTNÝ AKCIOVÝ FILTER: Čistíme akékoľvek textové mutácie a vklady bez tickerov
     df_akcie_len = df.copy()
-    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].fillna('UNKNOWN').astype(str).str.strip().str.upper()
+    df_akcie_len = df_akcie_len[df_akcie_len['Ticker'].notna()]
+    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
     df_akcie_len = df_akcie_len[(df_akcie_len['Ticker_Clean'] != '') & (df_akcie_len['Ticker_Clean'] != 'NONE') & (df_akcie_len['Ticker_Clean'] != 'NAN') & (df_akcie_len['Ticker_Clean'] != 'UNKNOWN')]
-    df_akcie_len = df_akcie_len[~df_akcie_len['Action_Clean'].str.contains('dividend|interest', na=False)].sort_values(by='Time').reset_index(drop=True)
+    df_akcie_len = df_akcie_len[~df_akcie_len['Action_Clean'].str.contains('dividend|dividenda|interest|úrok|urok|deposit|vklad|withdrawal', na=False)].sort_values(by='Time').reset_index(drop=True)
     
     databaza_mien = {}
     for _, riadok in df_akcie_len.iterrows():
-        databaza_mien[riadok['Ticker_Clean']] = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
+        tick = str(riadok['Ticker_Clean'])
+        if tick:
+            databaza_mien[tick] = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
 
     realizovane_obchody_rok = []
     otvorene_loty_portfolio = {}
-    zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique()])
+    zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique() if t and t != 'UNKNOWN'])
 
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
@@ -157,7 +160,7 @@ if st.session_state.databaza_transakcii is not None:
             cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
             
             is_sell_action = ('sell' in akcia or 'predaj' in akcia)
-            is_buy_action = ('buy' in akcia or 'nákup' in akcia or 'deposit' in akcia or 'vklad' in akcia)
+            is_buy_action = ('buy' in akcia or 'nákup' in akcia or 'nakup' in akcia)
             
             if is_buy_action and not is_sell_action:
                 nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']})
@@ -194,4 +197,3 @@ if st.session_state.databaza_transakcii is not None:
 
     col_m1, col_m2, col_m3 = st.columns(3)
     with col_m1: st.metric("Krátkodobý zdaniteľný zisk", f"{zdanitelny_zisk_celkom:,.2f} EUR")
-    with col_m2: st.metric("Daň z príjmu (19%)", f"{zdanitelny_zisk_celkom * 0.19:,.2f} EUR")
