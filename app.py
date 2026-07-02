@@ -161,7 +161,7 @@ if uploaded_files:
         ks_mlade = round(ks_mlade, 5)
         
         # =========================================================================
-        # 📊 VIZUÁLNY PROGRESS BAR & KARTY (BEZ VNORENÝCH PODMIENOK A WITH BLOKOV)
+        # 📊 VIZUÁLNY PROGRESS BAR & KARTY
         # =========================================================================
         if skutocny_stav > 0:
             vypocitany_pomer = float(ks_bez_dane / skutocny_stav)
@@ -186,3 +186,6 @@ if uploaded_files:
             txt_safe += "* *Poznámka: Tieto akcie spĺňajú ročný časový test v SR.*"
             karta1.success(txt_safe)
             
+            je_v_zisku = bool(hruby_zisk_risk > 0)
+            
+
