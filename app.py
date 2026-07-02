@@ -17,7 +17,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Inicializácia Session State proti resetom komponentov
 if 'df_raw' not in st.session_state:
     st.session_state.df_raw = None
 if 'selected_year' not in st.session_state:
@@ -46,6 +45,7 @@ def clean_numeric_string(val):
         return 0.0
 
 def normalize_columns(df):
+    """Mapuje iba kritické stĺpce, menu (Currency) úplne ignorujeme."""
     mapping = {
         'time': 'Time', 'čas': 'Time', 'cas': 'Time',
         'action': 'Action', 'operácia': 'Action', 'operacia': 'Action', 'typ': 'Action',
@@ -53,8 +53,7 @@ def normalize_columns(df):
         'name': 'Name', 'názov': 'Name', 'nazov': 'Name',
         'no. of shares': 'Shares', 'kusy': 'Shares', 'množstvo': 'Shares', 'mnozstvo': 'Shares',
         'price per share': 'PricePerShare', 'cena za kus': 'PricePerShare',
-        'total': 'Total', 'celkom': 'Total', 'suma': 'Total',
-        'currency': 'Currency', 'mena': 'Currency'
+        'total': 'Total', 'celkom': 'Total', 'suma': 'Total'
     }
     renamed_cols = {}
     for col in df.columns:
@@ -68,14 +67,14 @@ def normalize_columns(df):
                     break
     df = df.rename(columns=renamed_cols)
     
-    # OCHRANA: Ak stĺpec Currency nevznikol mapovaním, natvrdo ho vytvoríme s hodnotou EUR
-    if 'Currency' not in df.columns:
-        df['Currency'] = 'EUR'
-        
+    # Garantujeme existenciu iba základných stĺpcov
     required_keys = ['Time', 'Action', 'Ticker', 'Name', 'Shares', 'PricePerShare', 'Total']
     for req in required_keys:
         if req not in df.columns:
-            df[req] = np.nan
+            if req in ['Action', 'Ticker', 'Name']:
+                df[req] = 'UNKNOWN'
+            else:
+                df[req] = 0.0
     return df
 
 def process_uploaded_files(uploaded_files):
@@ -83,22 +82,23 @@ def process_uploaded_files(uploaded_files):
     for file in uploaded_files:
         try:
             current_df = pd.read_csv(file)
+            current_df = normalize_columns(current_df)
             df_list.append(current_df)
-        except Exception:
+        except Exception as e:
+            st.error(f"Chyba pri čítaní súboru: {e}")
             continue
             
     if not df_list:
         return None
         
     combined_df = pd.concat(df_list, ignore_index=True)
-    combined_df = normalize_columns(combined_df)
     
-    # Bezpečné ošetrenie textu a konverzia na veľké písmená
-    combined_df['Currency'] = combined_df['Currency'].fillna('EUR').astype(str).str.upper().str.strip()
+    # Vyčistenie číselných stĺpcov
     combined_df['Shares'] = combined_df['Shares'].apply(clean_numeric_string)
     combined_df['PricePerShare'] = combined_df['PricePerShare'].apply(clean_numeric_string)
     combined_df['Total'] = combined_df['Total'].apply(clean_numeric_string)
     
+    # Prevod dátumu
     combined_df['Time'] = pd.to_datetime(combined_df['Time'], format='mixed', errors='coerce')
     combined_df = combined_df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     return combined_df
@@ -108,9 +108,8 @@ def process_uploaded_files(uploaded_files):
 # ==========================================
 def run_fifo_engine(df):
     action_pattern = r'(buy|sell|nákup|nakup|predaj)'
+    
     valid_df = df[
-        df['Ticker'].notna() & 
-        (df['Ticker'].str.strip() != '') & 
         df['Action'].astype(str).str.lower().str.contains(action_pattern, regex=True)
     ].copy()
     
@@ -123,7 +122,10 @@ def run_fifo_engine(df):
     t_exempt, t_taxable, t_years = [], [], []
     
     for idx, row in valid_df.iterrows():
-        ticker = str(row['Ticker']).strip().upper()
+        ticker = str(row['Ticker']).strip().upper() if pd.notna(row['Ticker']) else 'UNKNOWN'
+        if ticker in ['UNKNOWN', 'NAN', '']:
+            continue
+            
         action = str(row['Action']).lower()
         row_date = row['Time']
         shares = abs(row['Shares'])
@@ -134,6 +136,7 @@ def run_fifo_engine(df):
             fifo_pools[ticker] = []
             lot_counters[ticker] = 0
             
+        # NÁKUP
         if 'buy' in action or 'nákup' in action or 'nakup' in action:
             lot_counters[ticker] += 1
             fifo_pools[ticker].append({
@@ -141,10 +144,10 @@ def run_fifo_engine(df):
                 'shares': shares,
                 'price_eur': price_eur,
                 'orig_shares': shares,
-                'lot_id': lot_counters[ticker],
-                'currency_orig': row['Currency']
+                'lot_id': lot_counters[ticker]
             })
             
+        # PREDAJ
         elif 'sell' in action or 'predaj' in action:
             shares_to_sell = shares
             loop_limit = len(fifo_pools[ticker])
@@ -213,10 +216,10 @@ def run_fifo_engine(df):
     return trades_df, fifo_pools
 
 # ==========================================
-# HLAVNÝ BEZPEČNÝ RENDER STRÁNKY (UI)
+# HLAVNÝ RENDER STRÁNKY (UI)
 # ==========================================
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212")
-st.caption("Verzia 4.1: Opravená detekcia meny pri chýbajúcom stĺpci.")
+st.caption("Verzia 4.3: Úplne odstránený stĺpec Currency z parsovania. Maximálna stabilita.")
 
 st.header("1. Vstup dát (Hromadný import CSV)")
 uploaded_files = st.file_uploader(
@@ -262,4 +265,5 @@ else:
     target_year = int(st.session_state.selected_year)
     df_filtered_trades = df_trades[df_trades['Rok_Predaja'] == target_year] if not df_trades.empty else pd.DataFrame()
 
+# SEKCIA 3: VÝPOČET DANÍ A ODVODOV ZA VYBRANÝ ROK
 
