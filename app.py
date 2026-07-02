@@ -35,7 +35,7 @@ if uploaded_files:
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🔍 BEZPEČNÁ DETEKCIA JEDNÉHO STĹPCA (OPRAVA CHYBY S ZOZNAMOM)
+    # 🔍 REÁLNA OPRAVA: Striktný výber jedného názvu stĺpca (reťazca) namiesto zoznamu
     shares_matches = [c for c in df.columns if 'shares' in c.lower() or 'kus' in c.lower()]
     col_shares = shares_matches[0] if shares_matches else 'No. of shares'
 
@@ -159,11 +159,11 @@ if st.session_state.databaza_transakcii is not None:
                 
                 skutocny_stav = vstup_vlastnene
                 if vstup_vlastnene > max_sklad_dostupny:
-                    st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade reálne zostáva len {max_sklad_dostupny:.5f} ks. Prepočet orezávame na maximum.")
+                    st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade reálne zostáva len {max_sklad_dostupny:.5f} ks. Prepočet orezávame na reálne maximum.")
                     skutocny_stav = max_sklad_dostupny
                     
                 if skutocny_stav <= 0:
-                    st.warning("⚠️ Pre zvolenú akciu neboli v sklade nájdené žiadne otvorené pozície.")
+                    st.warning(f"⚠️ Pre ticker {vybrany_ticker_pure} neboli v sklade nájdené žiadne otvorené pozície. (Dostupný stav na sklade: {max_sklad_dostupny:.5f} ks)")
                 else:
                     potrebne_ks = skutocny_stav
                     dnes = datetime.now()
@@ -176,5 +176,3 @@ if st.session_state.databaza_transakcii is not None:
                     zoznam_riadkov_exportu = []
                     
                     for n in sklad_aktualny:
-                        if potrebne_ks < 1e-5:
-                            break
