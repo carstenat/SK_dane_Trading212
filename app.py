@@ -117,7 +117,7 @@ if st.session_state.databaza_transakcii is not None:
             st.metric("Zahraničná zrazená daň (WHT)", f"{total_div_wht:.2f} EUR")
             st.write(f"**Čisté dividendy:** {total_div_gross - total_div_wht:.2f} EUR")
         else:
-            st.info("Žiadne dividendy.")
+            st.info("Pre zvolené obdobie sa nenašli žiadne dividendy.")
             
     with col_int:
         st.header(f"💶 Modul Úrokov ({st.session_state.vybrany_rok})")
@@ -126,7 +126,7 @@ if st.session_state.databaza_transakcii is not None:
             st.metric("Pripísané denné úroky (Brutto)", f"{total_interest_brutto:.2f} EUR")
             st.metric("Daňová povinnosť v SR (19%)", f"{total_interest_brutto * 0.19:.2f} EUR")
         else:
-            st.info("Žiadne úroky z hotovosti.")
+            st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
 
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
@@ -193,7 +193,5 @@ if st.session_state.databaza_transakcii is not None:
         st.dataframe(df_realizovane, use_container_width=True)
         zdanitelny_zisk_celkom = max(0.0, df_realizovane['Zdaniteľný Zisk'].sum())
 
-    # 🌟 ROBUSTNÉ UKOTVENIE METRÍK: Už nikdy nezmiznú, sú generované pred optimalizátorom
-    col_m1, col_m2, col_m3 = st.columns(3)
-    with col_m1: st.metric("Krátkodobý zdaniteľný zisk", f"{zdanitelny_zisk_celkom:,.2f} EUR")
-    with col_m2: st.metric("Daň z príjmu (19%)", f"{zdanitelny_zisk_celkom * 0.19:,.2f} EUR")
+    # 🌟 DEFINITÍVNY FIX RIADKOVÝCH METRÍK: Zobrazené pod sebou, aby sa nič neskrývalo na kraji
+    st.write(f"### 📈 Celkový zdaniteľný zisk z akcií: **{zdanitelny_zisk_celkom:,.2f} EUR**")
