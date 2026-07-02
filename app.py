@@ -157,7 +157,6 @@ if st.session_state.databaza_transakcii is not None:
     vsetky_realizovane_global = []
     celkove_riziko_global = 0.0
     
-    # Prebehneme FIFO engine na pozadí pre úplne každú akciu
     for t_glob in zoznam_tickerov_vsetky:
         df_t_glob = df[df['Ticker_Clean'] == t_glob].copy()
         tx_glob = df_t_glob[df_t_glob['Action'].str.lower().str.contains('buy|sell', na=False)].copy()
@@ -192,4 +191,5 @@ if st.session_state.databaza_transakcii is not None:
                         
                         oslobodene = (cas_tx - lot["Time"]).days >= 365
                         
-                        # Ukladáme iba predaje patriace do zvoleného roku
+                        if st.session_state.vybrany_rok == "Všetky" or rok_tx == int(st.session_state.vybrany_rok):
+                            novy_r = dict()
