@@ -4,6 +4,12 @@ from datetime import datetime
 
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
+# Inicializácia trvalej pamäte pre výpočty (zamedzí resetovaniu tlačidla)
+if 'vypocet_aktivny' not in st.session_state:
+    st.session_state.vypocet_aktivny = False
+if 'posledny_ticker' not in st.session_state:
+    st.session_state.posledny_ticker = ""
+
 # =========================================================================
 # 🎨 PRÉMIOVÝ FINTECH VZHĽAD (DEFAULT SVETLÝ, VYSOKÝ KONTRAST)
 # =========================================================================
@@ -103,6 +109,11 @@ if uploaded_files:
         vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_final")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
+        # Ak používateľ zmení ticker, resetujeme stav výpočtu
+        if st.session_state.posledny_ticker != vybrany_ticker_pure:
+            st.session_state.vypocitany_pomer = False
+            st.session_state.posledny_ticker = vybrany_ticker_pure
+        
         col1, col2 = st.columns(2)
         with col1:
             vstup_vlastnene = st.number_input("Počet kusov plánovaných na predaj:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_final")
@@ -111,7 +122,15 @@ if uploaded_files:
         
         spustit_vypocet = st.button("🚀 Spustiť daňový prepočet pre vybranú akciu", type="primary", use_container_width=True)
         
-        if spustit_vypocet and vstup_vlastnene > 0:
+        if spustit_vypocet:
+            if vstup_vlastnene > 0:
+                st.session_state.vypocet_aktivny = True
+            else:
+                st.warning("⚠️ Zadajte najprv počet kusov väčší ako 0.")
+                st.session_state.vypocet_aktivny = False
+        
+        # Ak je výpočet aktivovaný v Session State, trvalo ho zobrazíme
+        if st.session_state.vypocet_aktivny:
             df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
             
             # FIFO MOTOR
@@ -165,16 +184,3 @@ if uploaded_files:
                 
                 d_nakupu = nakup_pure.strftime('%d.%m.%Y')
                 text_mnozstva = f"{vziat_ks:.5f} ks"
-                text_ceny = f"{n['cena_za_kus']:.2f} EUR/ks"
-                text_celkovo = f"Nákup: {cena_balika:.2f} EUR"
-                
-                if vek_dni >= 365:
-                    ks_bez_dane += vziat_ks
-                    vydavok_safe_balika += cena_balika
-                    riadok_prehladu = f"🟢 **BEZ DANE** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Netreba čakať (Oslobodené)"
-                    rozpis_textov.append(riadok_prehladu)
-                    zoznam_riadkov_exportu.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Bez dane", "Uz oslobodene", "0", f"{aktualna_hodnota_balika:.2f}", f"{zisk_balika:.2f}"])
-                else:
-                    ks_mlade += vziat_ks
-                    vydavok_mladeho_balika += cena_balika
-
