@@ -35,15 +35,22 @@ if uploaded_files:
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🔍 UNIVERZÁLNE PREMENOVANIE STFLDCOV - Odstráni akékoľvek zoznamy a zjednotí formát
+    # 🔍 UNIVERZÁLNE PREMENOVANIE STĹPCOV - Ochrana pred duplicitnými stĺpcami (napr. Total a Total (EUR))
     mapovanie_stlpcov = {}
+    najdeny_shares = False
+    najdeny_total = False
+    najdeny_wht = False
+    
     for c in df.columns:
-        if 'shares' in c.lower() or 'kus' in c.lower():
+        if ('shares' in c.lower() or 'kus' in c.lower()) and not najdeny_shares:
             mapovanie_stlpcov[c] = 'No. of shares'
-        elif 'total' in c.lower() or 'celkom' in c.lower():
+            najdeny_shares = True
+        elif ('total' in c.lower() or 'celkom' in c.lower()) and not najdeny_total:
             mapovanie_stlpcov[c] = 'Total'
-        elif 'withholding' in c.lower() or 'zrazen' in c.lower():
+            najdeny_total = True
+        elif ('withholding' in c.lower() or 'zrazen' in c.lower()) and not najdeny_wht:
             mapovanie_stlpcov[c] = 'Withholding tax'
+            najdeny_wht = True
             
     df = df.rename(columns=mapovanie_stlpcov)
     
@@ -55,7 +62,7 @@ if st.session_state.databaza_transakcii is not None:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     
     # =========================================================================
-    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY (ZOBRAZENÉ HNEĎ)
+    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY
     # =========================================================================
     df_dividendy = df[df['Action'].str.lower().str.contains('dividend', na=False)].copy()
     df_uroky = df[df['Action'].str.lower().str.contains('interest', na=False)].copy()
@@ -110,7 +117,7 @@ if st.session_state.databaza_transakcii is not None:
                 databaza_mien[tick_c] = full_name
 
     # =========================================================================
-    # 🔍 HLAVNÝ OPTIMALIZÁTOR POZÍCIE (PRIDANÝ MODUL)
+    # 🔍 HLAVNÝ OPTIMALIZÁTOR POZÍCIE
     # =========================================================================
     st.markdown("---")
     st.header("🔍 Hlavný optimalizátor pozície")
@@ -124,7 +131,6 @@ if st.session_state.databaza_transakcii is not None:
         meno_akcie = databaza_mien.get(vybrany_ticker, "Neznámy titul")
         st.subheader(f"Analýza pre: {vybrany_ticker} - {meno_akcie}")
         
-        # Filtrujeme iba nákupné akcie pre analýzu držania
         df_nakupy = df_ticker[df_ticker['Action'].str.lower().str.contains('buy', na=False)].copy()
         
         if not df_nakupy.empty:
@@ -171,7 +177,6 @@ if st.session_state.databaza_transakcii is not None:
             st.write("### Detailný rozpad nákupných šarží (Lotov):")
             st.dataframe(df_vysledok, use_container_width=True)
             
-            # Lineárne skladanie textu bez triple-quoted f-stringov (Ochrana pravidla č. 2)
             txt_info = "💡 **Tip pre daňovú optimalizáciu v SR:**\n"
             txt_info += "Slovenská legislatíva uplatňuje ročný časový test na predaj cenných papierov obchodovaných na regulovanej burze.\n"
             txt_info += "Ak plánujete pozíciu čiastočne redukovať, uistite sa, že uplatňujete metódu FIFO (First-In, First-Out)\n"
