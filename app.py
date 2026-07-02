@@ -161,7 +161,7 @@ if uploaded_files:
         ks_mlade = round(ks_mlade, 5)
         
         # =========================================================================
-        # 📊 VIZUÁLNY PROGRESS BAR & KARTY
+        # 📊 VIZUÁLNY PROGRESS BAR & KARTY (BEZ BLOCKOV WITH)
         # =========================================================================
         if skutocny_stav > 0:
             vypocitany_pomer = float(ks_bez_dane / skutocny_stav)
@@ -178,13 +178,12 @@ if uploaded_files:
             odvody_risk = max(0.0, hruby_zisk_risk * 0.14)
             cisty_zisk_risk = hruby_zisk_risk - dan_risk - odvody_risk
             
-            col_karta1, col_karta2 = st.columns(2)
+            karta1, karta2 = st.columns(2)
             
-            with col_karta1:
-                txt_safe = "### 🟢 Zelená karta úspechu (Oslobodené)\n\n"
-                txt_safe += f"* **Trhová hodnota:** {trh_hodnota_safe:.2f} EUR\n"
-                txt_safe += f"* **Čistý zisk bez dane:** {cisty_zisk_safe:.2f} EUR\n"
-                txt_safe += "* *Poznámka: Tieto akcie spĺňajú ročný časový test v SR.*"
-                st.success(txt_safe)
+            txt_safe = "### 🟢 Zelená karta úspechu (Oslobodené)\n\n"
+            txt_safe += f"* **Trhová hodnota:** {trh_hodnota_safe:.2f} EUR\n"
+            txt_safe += f"* **Čistý zisk bez dane:** {cisty_zisk_safe:.2f} EUR\n"
+            txt_safe += "* *Poznámka: Tieto akcie spĺňajú ročný časový test v SR.*"
+            karta1.success(txt_safe)
                 
-            with col_karta2:
+            if hruby_zisk_risk > 0:
