@@ -193,8 +193,8 @@ def run_fifo_engine(df, cached_rates):
             fifo_pools[ticker] = []
             lot_counters[ticker] = 0
             
+        # NÁKUP (Prírastok do fronty)
         if 'buy' in action or 'nákup' in action or 'nakup' in action:
-            lot_counters[ticker].append if isinstance(lot_counters[ticker], list) else None
             lot_counters[ticker] += 1
             fifo_pools[ticker].append({
                 'date': row_date,
@@ -205,12 +205,12 @@ def run_fifo_engine(df, cached_rates):
                 'currency_orig': currency
             })
             
+        # PREDAJ (Párovanie FIFO z najstaršieho lotu)
         elif 'sell' in action or 'predaj' in action:
             shares_to_sell = shares
             
-            # OPRAVA: korektné prechádzanie a odoberanie z listu fifo_pools[ticker]
             while shares_to_sell > 0 and len(fifo_pools[ticker]) > 0:
-                oldest_lot = fifo_pools[ticker][0] # <--- FIX: Vyberie prvý (najstarší) prvok
+                oldest_lot = fifo_pools[ticker][0]  # Bezpečný výber prvého (najstaršieho) lotu v poli
                 
                 if oldest_lot['shares'] <= shares_to_sell:
                     matched_shares = oldest_lot['shares']
@@ -252,3 +252,4 @@ def run_fifo_engine(df, cached_rates):
                     'Spoločnosť': name,
                     'Kusy': shares_to_sell,
                     'Dátum nákupu': 'Neznámy',
+                    'Dátum predaja': row_date.strftime('%Y-%m-%d'),
