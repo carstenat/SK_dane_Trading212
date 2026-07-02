@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 # ==========================================
 TAX_RATE_SK = 0.19
 HEALTH_INSURANCE_RATE_SK = 0.15
-TAX_EXEMPTION_LIMIT_SK = 500.0  # Oslobodenie 500 € podľa § 9 ZDP
+TAX_EXEMPTION_LIMIT_SK = 500.0
 
 st.set_page_config(
     page_title="PRO Optimalizátor Trading 212",
@@ -19,18 +19,18 @@ st.set_page_config(
     layout="wide"
 )
 
-# Inicializácia pamäte pre zamedzenie resetov rozhrania
+# Inicializácia Session State proti resetom komponentov
 if 'df_raw' not in st.session_state:
     st.session_state.df_raw = None
 if 'selected_year' not in st.session_state:
     st.session_state.selected_year = "Všetky"
 
 # ==========================================
-# POMOCNÉ ČISTIACE A PARSOVACIE MODULY
+# POMOCNÉ UKLADACIE A STRIKTNÉ PARSERY
 # ==========================================
 @st.cache_data(ttl=86400)
 def fetch_ecb_daily_rates_for_year(year):
-    """Automaticky sťahuje ECB výmenné kurzy z oficiálneho archívu."""
+    """Sťahuje historické denné kurzy USD a GBP voči EUR z ECB pre daný rok."""
     rates = {'USD': {}, 'GBP': {}}
     try:
         url = "https://europa.eu"
@@ -55,7 +55,7 @@ def fetch_ecb_daily_rates_for_year(year):
     return rates
 
 def get_ecb_rate(date_obj, currency, year_rates):
-    """Zisťuje kurz pre daný deň s posunom na najbližší pracovný deň pri víkende."""
+    """Vráti výmenný kurz. Pri víkende hľadá najbližší predošlý pracovný deň."""
     if currency == 'EUR' or not currency:
         return 1.0
     curr_dict = year_rates.get(currency, {})
@@ -68,7 +68,6 @@ def get_ecb_rate(date_obj, currency, year_rates):
     return 1.10
 
 def clean_numeric_string(val):
-    """Vyčistí a transformuje textové reťazce a európske desatinné čiarky na čísla."""
     if pd.isna(val):
         return 0.0
     if isinstance(val, (int, float)):
@@ -88,7 +87,6 @@ def clean_numeric_string(val):
         return 0.0
 
 def normalize_columns(df):
-    """Unifikuje jazykové mutácie exportov (Slovak / English)."""
     mapping = {
         'time': 'Time', 'čas': 'Time', 'cas': 'Time',
         'action': 'Action', 'operácia': 'Action', 'operacia': 'Action', 'typ': 'Action',
@@ -97,7 +95,7 @@ def normalize_columns(df):
         'no. of shares': 'Shares', 'kusy': 'Shares', 'množstvo': 'Shares', 'mnozstvo': 'Shares',
         'price per share': 'PricePerShare', 'cena za kus': 'PricePerShare',
         'total': 'Total', 'celkom': 'Total', 'suma': 'Total',
-        'withholding tax': 'WHT', 'zrazená daň': 'WHT', 'currency': 'Currency', 'mena': 'Currency'
+        'currency': 'Currency', 'mena': 'Currency'
     }
     renamed_cols = {}
     for col in df.columns:
@@ -110,14 +108,13 @@ def normalize_columns(df):
                     renamed_cols[col] = target
                     break
     df = df.rename(columns=renamed_cols)
-    required_keys = ['Time', 'Action', 'Ticker', 'Name', 'Shares', 'PricePerShare', 'Total', 'WHT', 'Currency']
+    required_keys = ['Time', 'Action', 'Ticker', 'Name', 'Shares', 'PricePerShare', 'Total', 'Currency']
     for req in required_keys:
         if req not in df.columns:
             df[req] = 'EUR' if req == 'Currency' else np.nan
     return df
 
 def process_uploaded_files(uploaded_files):
-    """Spracuje, zlúči a normalizuje nahraté dokumenty."""
     df_list = []
     for file in uploaded_files:
         try:
@@ -128,8 +125,8 @@ def process_uploaded_files(uploaded_files):
                 elif 'total' in col.lower() and ('gbp' in col.lower() or '£' in col.lower()):
                     current_df['Currency_Detected'] = 'GBP'
             df_list.append(current_df)
-        except Exception as e:
-            st.error(f"Chyba pri spracovaní súboru: {e}")
+        except Exception:
+            continue
             
     if not df_list:
         return None
@@ -150,7 +147,7 @@ def process_uploaded_files(uploaded_files):
     return combined_df
 
 # ==========================================
-# ČISTÉ ODDELENÉ FIFO JADRO (BEZ SPREVÁDZANÝCH CHÝB)
+# VYČISTENÉ PLOCHÉ FIFO JADRO
 # ==========================================
 def run_fifo_engine(df, cached_rates):
     action_pattern = r'(buy|sell|nákup|nakup|predaj)'
@@ -161,8 +158,13 @@ def run_fifo_engine(df, cached_rates):
     ].copy()
     
     fifo_pools = {}
-    realized_trades = []
     lot_counters = {}
+    
+    # Použitie plochých polí pre zamedzenie chýb syntaxe interpretátora
+    t_tickers, t_names, t_shares = [], [], []
+    t_buydates, t_selldates, t_days = [], [], []
+    t_revenue, t_costs, t_profit = [], [], []
+    t_exempt, t_taxable, t_years = [], [], []
     
     for idx, row in valid_df.iterrows():
         ticker = str(row['Ticker']).strip().upper()
@@ -180,25 +182,24 @@ def run_fifo_engine(df, cached_rates):
             fifo_pools[ticker] = []
             lot_counters[ticker] = 0
             
-        # 1. Krokové spracovanie NÁKUPU
+        # SPRACUJE NÁKUP
         if 'buy' in action or 'nákup' in action or 'nakup' in action:
             lot_counters[ticker] += 1
-            new_lot = {
+            fifo_pools[ticker].append({
                 'date': row_date,
                 'shares': shares,
                 'price_eur': price_eur,
                 'orig_shares': shares,
                 'lot_id': lot_counters[ticker],
                 'currency_orig': currency
-            }
-            fifo_pools[ticker].append(new_lot)
+            })
             
-        # 2. Krokové spracovanie PREDAJA
+        # SPRACUJE PREDAJ
         elif 'sell' in action or 'predaj' in action:
             shares_to_sell = shares
             
             while shares_to_sell > 0 and len(fifo_pools[ticker]) > 0:
-                oldest_lot = fifo_pools[ticker][0]  # Bezpečný a nemenný výber najstaršieho lotu
+                oldest_lot = fifo_pools[ticker][0]
                 
                 if oldest_lot['shares'] <= shares_to_sell:
                     matched_shares = oldest_lot['shares']
@@ -219,24 +220,30 @@ def run_fifo_engine(df, cached_rates):
                 is_exempt = days_held >= 365
                 taxable_profit = profit_loss_eur if not is_exempt else 0.0
                 
-                # Izolovaná definícia záznamu mimo volania funkcie (Ochrana pred SyntaxError)
-                trade_record = {
-                    'Ticker': ticker,
-                    'Spoločnosť': name,
-                    'Kusy': matched_shares,
-                    'Dátum nákupu': buy_date.strftime('%Y-%m-%d'),
-                    'Dátum predaja': row_date.strftime('%Y-%m-%d'),
-                    'Dni držania': days_held,
-                    'Príjmy (EUR)': revenue_basis_eur,
-                    'Výdavky (EUR)': cost_basis_eur,
-                    'Zisk/Strata (EUR)': profit_loss_eur,
-                    'Oslobodené': 'Áno' if is_exempt else 'Nie',
-                    'Zdaniteľný zisk': taxable_profit,
-                    'Rok_Predaja': row_date.year
-                }
-                realized_trades.append(trade_record)
+                # Ploché plnenie polí
+                t_tickers.append(ticker)
+                t_names.append(name)
+                t_shares.append(matched_shares)
+                t_buydates.append(buy_date.strftime('%Y-%m-%d'))
+                t_selldates.append(row_date.strftime('%Y-%m-%d'))
+                t_days.append(days_held)
+                t_revenue.append(revenue_basis_eur)
+                t_costs.append(cost_basis_eur)
+                t_profit.append(profit_loss_eur)
+                t_exempt.append('Áno' if is_exempt else 'Nie')
+                t_taxable.append(taxable_profit)
+                t_years.append(row_date.year)
                 
             if shares_to_sell > 0:
-                short_record = {
-                    'Ticker': ticker,
-                    'Spoločnosť': name,
+                t_tickers.append(ticker)
+                t_names.append(name)
+                t_shares.append(shares_to_sell)
+                t_buydates.append('Neznámy')
+                t_selldates.append(row_date.strftime('%Y-%m-%d'))
+                t_days.append(0)
+                t_revenue.append(shares_to_sell * price_eur)
+                t_costs.append(0.0)
+                t_profit.append(0.0)
+                t_exempt.append('Nie')
+                t_taxable.append(0.0)
+                t_years.append(row_date.year)
