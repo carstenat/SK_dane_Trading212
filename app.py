@@ -264,3 +264,4 @@ if not df_main.empty:
 
 cols_years = st.columns(len(available_years))
 for idx, yr in enumerate(available_years):
+
