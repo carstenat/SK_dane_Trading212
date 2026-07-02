@@ -28,7 +28,7 @@ else:
     """, unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií a ročné daňové podklady.")
+st.write("Profesionálny Nástroj na kontrolu časového testu pred predajom akcií a ročné daňové podklady.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True, key="uploader_main_final")
 
@@ -55,8 +55,9 @@ if uploaded_files:
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
                 databaza_mien[tick_c] = full_name
 
-    # 📅 TRI ROČNÉ ZÁLOŽKY - PEVNÁ, RUČNÁ ŠTUKTÚRA BEZ RISKANTNÝCH CYKLOV
+    # 📅 TRI ROČNÉ ZÁLOŽKY - RUČNÁ ŠTRUKTÚRA
     tab2024, tab2025, tab2026 = st.tabs(["📅 Daňový rok 2024", "📅 Daňový rok 2025", "📅 Daňový rok 2026"])
+    dnes = datetime.now()
     
     # =========================================================================
     # 📑 SEKCIA 1: DAŇOVÝ ROK 2024
@@ -99,7 +100,6 @@ if uploaded_files:
             if vlastnene_24 > max_24: st.error(f"⚠️ Maximálny dostupný sklad pre rok 2024 je {max_24:.5f} ks.")
             
             p_ks_24 = stav_24
-            dnes = datetime.now()
             sb_24, mb_24, v_sb_24, v_mb_24 = 0.0, 0.0, 0.0, 0.0
             txt_24, csv_24 = [], [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup", "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
             
@@ -143,19 +143,19 @@ if uploaded_files:
                 st.download_button(label="📥 STIAHNUŤ ROZPIS FRAKCIÍ ZA ROK 2024 (CSV)", data=csv_str_24.encode('utf-8'), file_name=f"t212_frakcie_{ticker_pure_2024}_2024.csv", mime="text/csv", key="btn_24")
                 for t in txt_24: st.write(t)
                 
-        # Dividendy 2024
-        st.markdown("##")
-        df_div_24 = df_global[(df_global['Action'].str.lower().str.contains('dividend|dividenda', na=False)) & (df_global['Rok'] == 2024) & (df_global['Ticker_Clean'] == ticker_pure_2024 if tickererv_2024 := locals().get('tickerov_2024') else False)].copy()
-        exp_div_24 = st.expander("💰 Zobraziť podklady pre Dividendy za daňový rok 2024")
-        if len(df_div_24) > 0:
-            tb, tt = 0.0, 0.0
-            for _, r in df_div_24.iterrows():
-                b = float(r['Total']) + float(r['Withholding tax'])
-                tb += b; tt += float(r['Withholding tax'])
-                exp_div_24.write(f"📅 {pd.to_datetime(r['Time']).strftime('%d.%m.%Y')} | Brutto: {b:.2f} EUR | Daň v zahraničí: {r['Withholding tax']:.2f} EUR")
-            exp_div_24.write(f"**Celkový príjem Brutto (Riadok 1):** `{tb:.2f} EUR` | **Zaplatená daň v zahraničí:** `{tt:.2f} EUR`")
-        else: exp_div_24.info("V daňovom roku 2024 neboli nájdené žiadne dividendy pre túto akciu.")
-        
+            # Dividendy 2024 (Opravený bezpečný riadok)
+            st.markdown("##")
+            df_div_24 = df_global[(df_global['Action'].str.lower().str.contains('dividend|dividenda', na=False)) & (df_global['Rok'] == 2024) & (df_global['Ticker_Clean'] == ticker_pure_2024)].copy()
+            exp_div_24 = st.expander("💰 Zobraziť podklady pre Dividendy za daňový rok 2024")
+            if len(df_div_24) > 0:
+                tb, tt = 0.0, 0.0
+                for _, r in df_div_24.iterrows():
+                    b = float(r['Total']) + float(r['Withholding tax'])
+                    tb += b; tt += float(r['Withholding tax'])
+                    exp_div_24.write(f"📅 {pd.to_datetime(r['Time']).strftime('%d.%m.%Y')} | Brutto: {b:.2f} EUR | Daň v zahraničí: {r['Withholding tax']:.2f} EUR")
+                exp_div_24.write(f"**Celkový príjem Brutto (Riadok 1):** `{tb:.2f} EUR` | **Zaplatená daň v zahraničí:** `{tt:.2f} EUR`")
+            else: exp_div_24.info("V daňovom roku 2024 neboli nájdené žiadne dividendy pre túto akciu.")
+            
         # Úroky 2024
         df_ur_24 = df_global[(df_global['Action'].str.lower().str.contains('interest on cash|úrok|urok', na=False)) & (df_global['Rok'] == 2024)].copy()
         exp_ur_24 = st.expander("💶 Zobraziť sumár Úrokov z neinvestovanej hotovosti za daňový rok 2024")
