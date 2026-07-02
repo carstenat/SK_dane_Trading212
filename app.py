@@ -35,15 +35,22 @@ if uploaded_files:
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🔍 REÁLNA OPRAVA: Striktný výber jedného názvu stĺpca (reťazca) namiesto zoznamu
-    shares_matches = [c for c in df.columns if 'shares' in c.lower() or 'kus' in c.lower()]
-    col_shares = shares_matches[0] if shares_matches else 'No. of shares'
-
-    total_matches = [c for c in df.columns if 'total' in c.lower() or 'celkom' in c.lower()]
-    col_total = total_matches[0] if total_matches else 'Total'
-
-    wht_matches = [c for c in df.columns if 'withholding' in c.lower() or 'zrazen' in c.lower()]
-    col_wht = wht_matches[0] if wht_matches else 'Withholding tax'
+    # 🔍 UNIVERZÁLNE PREMENOVANIE STĹPCOV - Odstráni akékoľvek zoznamy a zjednotí formát
+    mapovanie_stlpcov = {}
+    for c in df.columns:
+        if 'shares' in c.lower() or 'kus' in c.lower():
+            mapovanie_stlpcov[c] = 'No. of shares'
+        elif 'total' in c.lower() or 'celkom' in c.lower():
+            mapovanie_stlpcov[c] = 'Total'
+        elif 'withholding' in c.lower() or 'zrazen' in c.lower():
+            mapovanie_stlpcov[c] = 'Withholding tax'
+            
+    df = df.rename(columns=mapoverride_stlpcov if 'mapovanie_stlpcov' in locals() else mapovanie_stlpcov)
+    
+    # Doplnenie chýbajúcich stĺpcov pre istotu
+    if 'No. of shares' not in df.columns: df['No. of shares'] = 0.0
+    if 'Total' not in df.columns: df['Total'] = 0.0
+    if 'Withholding tax' not in df.columns: df['Withholding tax'] = 0.0
     
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     
@@ -59,8 +66,8 @@ if st.session_state.databaza_transakcii is not None:
     with col_div:
         st.header("💰 Modul Dividend")
         if not df_dividendy.empty:
-            total_div_gross = pd.to_numeric(df_dividendy[col_total], errors='coerce').fillna(0.0).sum()
-            total_div_wht = pd.to_numeric(df_dividendy[col_wht], errors='coerce').fillna(0.0).sum() if col_wht in df_dividendy.columns else 0.0
+            total_div_gross = pd.to_numeric(df_dividendy['Total'], errors='coerce').fillna(0.0).sum()
+            total_div_wht = pd.to_numeric(df_dividendy['Withholding tax'], errors='coerce').fillna(0.0).sum()
             total_div_net = total_div_gross - total_div_wht
             
             st.metric("Celkové pripísané dividendy (Brutto)", f"{total_div_gross:.2f} EUR")
@@ -68,14 +75,14 @@ if st.session_state.databaza_transakcii is not None:
             st.write(f"**Čisté vyplatené dividendy (Netto):** {total_div_net:.2f} EUR")
             
             with st.expander("Zobraziť históriu dividend"):
-                st.dataframe(df_dividendy[['Time', 'Ticker', 'Action', col_total]].head(100))
+                st.dataframe(df_dividendy[['Time', 'Ticker', 'Action', 'Total']].head(100))
         else:
             st.info("V importovaných súboroch sa nenachádzajú žiadne záznamy o dividendách.")
             
     with col_int:
         st.header("💶 Modul Úrokov")
         if not df_uroky.empty:
-            total_interest_brutto = pd.to_numeric(df_uroky[col_total], errors='coerce').fillna(0.0).sum()
+            total_interest_brutto = pd.to_numeric(df_uroky['Total'], errors='coerce').fillna(0.0).sum()
             dan_z_urokov = total_interest_brutto * 0.19
             total_interest_netto = total_interest_brutto - dan_z_urokov
             
@@ -84,14 +91,14 @@ if st.session_state.databaza_transakcii is not None:
             st.write(f"**Čistý výnos z úrokov po zdanení:** {total_interest_netto:.2f} EUR")
             
             with st.expander("Zobraziť históriu pripísaných úrokov"):
-                st.dataframe(df_uroky[['Time', 'Action', col_total]].head(100))
+                st.dataframe(df_uroky[['Time', 'Action', 'Total']].head(100))
         else:
             st.info("V importovaných súboroch sa nenachádzajú žiadne záznamy o úrokoch z hotovosti.")
 
     # Spracovanie dát pre akcie
     df = df.dropna(subset=['Time', 'Ticker']).sort_values(by='Time').reset_index(drop=True)
-    df['No. of shares'] = pd.to_numeric(df[col_shares], errors='coerce').fillna(0.0)
-    df['Total'] = pd.to_numeric(df[col_total], errors='coerce').fillna(0.0)
+    df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
+    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
     df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
         
     databaza_mien = {}
@@ -159,7 +166,7 @@ if st.session_state.databaza_transakcii is not None:
                 
                 skutocny_stav = vstup_vlastnene
                 if vstup_vlastnene > max_sklad_dostupny:
-                    st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade reálne zostáva len {max_sklad_dostupny:.5f} ks. Prepočet orezávame na reálne maximum.")
+                    st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade reálne zostáva len {max_sklad_dostupny:.5f} ks. Prepočet orezávame na maximum.")
                     skutocny_stav = max_sklad_dostupny
                     
                 if skutocny_stav <= 0:
@@ -170,9 +177,3 @@ if st.session_state.databaza_transakcii is not None:
                     ks_bez_dane = 0.0
                     ks_mlade = 0.0
                     vydavok_safe_balika = 0.0
-                    vydavok_mladeho_balika = 0.0
-                    
-                    rozpis_textov = []
-                    zoznam_riadkov_exportu = []
-                    
-                    for n in sklad_aktualny:
