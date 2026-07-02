@@ -39,6 +39,7 @@ if uploaded_files:
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
+    # 🔍 NEPRIESTRELNÉ UNIVERZÁLNE MAPOVANIE VARIÁCIÍ STĹPCOV
     mapovanie_stlpcov = {}
     flags = {"time": False, "action": False, "ticker": False, "name": False, "shares": False, "price": False, "total": False, "wht": False}
     
@@ -48,6 +49,7 @@ if st.session_state.databaza_transakcii is not None:
             mapovanie_stlpcov[c] = 'Time'
             flags["time"] = True
         elif ('action' in c_low or 'operácia' in c_low or 'typ' in c_low) and not flags["action"]:
+            mapoverride = 'Action'
             mapovanie_stlpcov[c] = 'Action'
             flags["action"] = True
         elif ('ticker' in c_low or 'symbol' in c_low) and not flags["ticker"]:
@@ -77,6 +79,7 @@ if st.session_state.databaza_transakcii is not None:
     if 'Name' not in df.columns: df['Name'] = 'Neznáma spoločnosť'
     
     df['No. of shares'] = df['No. of shares'].apply(bezpecne_cislo)
+    df['Price per share'] = df['Price per share'].apply(bezpecne_cislo)
     df['Total'] = df['Total'].apply(bezpecne_cislo)
     df['Withholding tax'] = df['Withholding tax'].apply(bezpecne_cislo) if 'Withholding tax' in df.columns else 0.0
 
@@ -117,7 +120,7 @@ if st.session_state.databaza_transakcii is not None:
             st.metric("Zahraničná zrazená daň (WHT)", f"{total_div_wht:.2f} EUR")
             st.write(f"**Čisté dividendy:** {total_div_gross - total_div_wht:.2f} EUR")
         else:
-            st.info("Pre zvolené obdobie sa nenašli žiadne dividendy.")
+            st.info("Žiadne dividendy.")
             
     with col_int:
         st.header(f"💶 Modul Úrokov ({st.session_state.vybrany_rok})")
@@ -126,7 +129,7 @@ if st.session_state.databaza_transakcii is not None:
             st.metric("Pripísané denné úroky (Brutto)", f"{total_interest_brutto:.2f} EUR")
             st.metric("Daňová povinnosť v SR (19%)", f"{total_interest_brutto * 0.19:.2f} EUR")
         else:
-            st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
+            st.info("Žiadne úroky z hotovosti.")
 
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
@@ -147,51 +150,48 @@ if st.session_state.databaza_transakcii is not None:
     otvorene_loty_portfolio = {}
     zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique() if t and t != 'UNKNOWN'])
 
+    # 🌟 STOPERCENTNE MATEMATICKY FIFO ENGINE Z RETROSPEKTÍVY
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
         nakupne_loty = []
         
         for idx, row in df_t.iterrows():
             množstvo = abs(float(row['No. of shares']))
-            total_val = float(row['Total'])
+            cena_ks = float(row['Price per share'])
             akcia = str(row['Action_Clean'])
-            cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
             
-            is_sell_action = ('sell' in akcia or 'predaj' in akcia)
-            is_buy_action = ('buy' in akcia or 'nákup' in akcia or 'nakup' in akcia)
+            is_sell = ('sell' in akcia or 'predaj' in akcia)
+            is_buy = ('buy' in akcia or 'nákup' in akcia or 'nakup' in akcia)
             
-            if is_buy_action and not is_sell_action:
+            if is_buy and not is_sell:
+                # Ukladáme samostatný lot: zostávajúce_množstvo, nákupná_cena, dátum, pôvodný_objem
                 nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time'], 'pôvodné': množstvo})
                 continue
                 
-            if is_sell_action:
+            if is_sell:
                 množstvo_na_predaj = množstvo
                 for i in range(len(nakupne_loty)):
                     if nakupne_loty[i]['množstvo'] <= 0 or množstvo_na_predaj <= 0:
                         continue
+                        
                     odpredane = min(nakupne_loty[i]['množstvo'], množstvo_na_predaj)
                     nakupne_loty[i]['množstvo'] -= odpredane
                     množstvo_na_predaj -= odpredane
                     
-                    zisk = (odpredane * cena_ks) - (odpredane * nakupne_loty[i]['cena_nakup'])
-                    dni = (row['Time'] - nakupne_loty[i]['datum_nakup']).days
-                    oslobodene = (dni >= 365)
+                    # FIFO Výpočet zisku: (Predajná_Cena - Nákupná_Cena_Z_Lotu) * Odpredané_Kusy
+                    čistý_zisk = (cena_ks - nakupne_loty[i]['cena_nakup']) * odpredane
+                    
+                    # Overenie skutočného časového testu (Dátum predaja - Dátum nákupu z lotu)
+                    dni_drzania = (row['Time'] - nakupne_loty[i]['datum_nakup']).days
+                    oslobodene = (dni_drzania >= 365)
                     
                     if st.session_state.vybrany_rok == "Všetky" or row['Rok'] == int(st.session_state.vybrany_rok):
                         realizovane_obchody_rok.append({
-                            'Ticker': t, 'Spoločnosť': databaza_mien.get(t, "Neznáma"), 'Kusy': odpredane,
-                            'Zisk/Strata': zisk, 'Oslobodené': "Áno" if oslobodene else "Nie",
-                            'Zdaniteľný Zisk': 0.0 if oslobodene else (zisk if zisk > 0 else 0.0)
-                        })
-        otvorene_loty_portfolio[t] = nakupne_loty
-
-    if len(realizovane_obchody_rok) == 0:
-        st.info(f"ℹ️ V daňovom období '{st.session_state.vybrany_rok}' ste nerealizovali žiadne predaje akcií.")
-        zdanitelny_zisk_celkom = 0.0
-    else:
-        df_realizovane = pd.DataFrame(realizovane_obchody_rok)
-        st.dataframe(df_realizovane, use_container_width=True)
-        zdanitelny_zisk_celkom = max(0.0, df_realizovane['Zdaniteľný Zisk'].sum())
-
-    # 🌟 DEFINITÍVNY FIX RIADKOVÝCH METRÍK: Zobrazené pod sebou, aby sa nič neskrývalo na kraji
-    st.write(f"### 📈 Celkový zdaniteľný zisk z akcií: **{zdanitelny_zisk_celkom:,.2f} EUR**")
+                            'Ticker': t, 
+                            'Spoločnosť': databaza_mien.get(t, "Neznáma"), 
+                            'Kusy': odpredane,
+                            'Dátum nákupu': nakupne_loty[i]['datum_nakup'].strftime('%Y-%m-%d'),
+                            'Dátum predaja': row['Time'].strftime('%Y-%m-%d'),
+                            'Dni držania': f"{dni_drzania} dní",
+                            'Zisk/Strata (EUR)': čistý_zisk, 
+                            'Oslobodené': "Áno (Časový test OK)" if oslobodene else "Nie (Podlieha dani)",
