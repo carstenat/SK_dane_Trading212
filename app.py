@@ -5,13 +5,13 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 💾 TRVALÁ PAMÄŤ CLOUDU (ZABRÁNI MAZANIU DÁT PRI KLIKANÍ NA TLAČIDLÁ)
+# 💾 TRVALÁ PAMÄŤ CLOUDU (OCHRANA PRED RESETOM SÚBOROV)
 # =========================================================================
 if "databaza_transakcii" not in st.session_state:
     st.session_state.databaza_transakcii = None
 
 # =========================================================================
-# 🎨 PRÉMIOVÝ FINTECH VZHĽAD (DEFAULT SVETLÝ, VYSOKÝ KONTRAST)
+# 🎨 PRÉMIOVÝ FINTECH VZHĽAD
 # =========================================================================
 st.sidebar.header("⚙️ Nastavenia vzhľadu")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
@@ -26,26 +26,29 @@ st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akc
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True, key="uploader_main_final")
 
-# Ak používateľ nahrá nové súbory, okamžite ich spracujeme a uzamkneme do pamäte cloudu
 if uploaded_files:
     zoznam_df = []
     for file in uploaded_files:
         zoznam_df.append(pd.read_csv(file))
     st.session_state.databaza_transakcii = pd.concat(zoznam_df, ignore_index=True)
 
-# Ak máme dáta bezpečne v trvalej pamäti, pokračujeme vo výpočtoch
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # Inteligentná detekcia stĺpcov pre rôzne verzie Trading 212 exportov
-    col_shares = [c for c in df.columns if 'shares' in c.lower() or 'kus' in c.lower()] if any('shares' in c.lower() or 'kus' in c.lower() for c in df.columns) else 'No. of shares'
-    col_total = [c for c in df.columns if 'total' in c.lower() or 'celkom' in c.lower()] if any('total' in c.lower() or 'celkom' in c.lower() for c in df.columns) else 'Total'
-    col_wht = [c for c in df.columns if 'withholding' in c.lower() or 'zrazen' in c.lower()] if any('withholding' in c.lower() or 'zrazen' in c.lower() for c in df.columns) else 'Withholding tax'
+    # 🔍 BEZPEČNÁ DETEKCIA JEDNÉHO STĹPCA (OPRAVA CHYBY S ZOZNAMOM)
+    shares_matches = [c for c in df.columns if 'shares' in c.lower() or 'kus' in c.lower()]
+    col_shares = shares_matches[0] if shares_matches else 'No. of shares'
+
+    total_matches = [c for c in df.columns if 'total' in c.lower() or 'celkom' in c.lower()]
+    col_total = total_matches[0] if total_matches else 'Total'
+
+    wht_matches = [c for c in df.columns if 'withholding' in c.lower() or 'zrazen' in c.lower()]
+    col_wht = wht_matches[0] if wht_matches else 'Withholding tax'
     
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     
     # =========================================================================
-    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY (ZOBRAZENÉ VŽDY)
+    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY (ZOBRAZENÉ HNEĎ)
     # =========================================================================
     df_dividendy = df[df['Action'].str.lower().str.contains('dividend', na=False)].copy()
     df_uroky = df[df['Action'].str.lower().str.contains('interest', na=False)].copy()
@@ -65,7 +68,7 @@ if st.session_state.databaza_transakcii is not None:
             st.write(f"**Čisté vyplatené dividendy (Netto):** {total_div_net:.2f} EUR")
             
             with st.expander("Zobraziť históriu dividend"):
-                st.dataframe(df_dividendy[['Time', 'Ticker', 'Action', col_total]])
+                st.dataframe(df_dividendy[['Time', 'Ticker', 'Action', col_total]].head(100))
         else:
             st.info("V importovaných súboroch sa nenachádzajú žiadne záznamy o dividendách.")
             
@@ -81,11 +84,11 @@ if st.session_state.databaza_transakcii is not None:
             st.write(f"**Čistý výnos z úrokov po zdanení:** {total_interest_netto:.2f} EUR")
             
             with st.expander("Zobraziť históriu pripísaných úrokov"):
-                st.dataframe(df_uroky[['Time', 'Action', col_total]])
+                st.dataframe(df_uroky[['Time', 'Action', col_total]].head(100))
         else:
             st.info("V importovaných súboroch sa nenachádzajú žiadne záznamy o úrokoch z hotovosti.")
 
-    # Predspracovanie dát pre akcie
+    # Spracovanie dát pre akcie
     df = df.dropna(subset=['Time', 'Ticker']).sort_values(by='Time').reset_index(drop=True)
     df['No. of shares'] = pd.to_numeric(df[col_shares], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df[col_total], errors='coerce').fillna(0.0)
@@ -168,3 +171,10 @@ if st.session_state.databaza_transakcii is not None:
                     ks_mlade = 0.0
                     vydavok_safe_balika = 0.0
                     vydavok_mladeho_balika = 0.0
+                    
+                    rozpis_textov = []
+                    zoznam_riadkov_exportu = []
+                    
+                    for n in sklad_aktualny:
+                        if potrebne_ks < 1e-5:
+                            break
