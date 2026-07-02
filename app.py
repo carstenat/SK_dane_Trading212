@@ -5,7 +5,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 🎨 PRÉMIOVÝ FINTECH VZHĽAD (DEFAULT SVETLÝ, VYSOKÝ KONTRAST)
+# 🎨 FINTECH VZHĽAD (DEFAULT SVETLÝ, VYSOKÝ KONTRAST)
 # =========================================================================
 st.sidebar.header("⚙️ Nastavenia vzhľadu")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
@@ -115,6 +115,7 @@ if uploaded_files:
         vydavok_mladeho_balika = 0.0
         
         rozpis_textov = []
+        # 🛡️ PRÍPRAVA DÁT PRE SŤAHOVATEĽNÝ CSV SÚBOR
         export_csv_riadky = [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup", "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
         
         for n in sklad_aktualny:
@@ -150,12 +151,10 @@ if uploaded_files:
         ks_bez_dane = round(ks_bez_dane, 5)
         ks_mlade = round(ks_mlade, 5)
         
-        # Matematická synchronizácia textu a progress baru na reálne orezaný stav pozície
         st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
         vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
         st.progress(max(0.0, min(1.0, vypocitany_pomer)))
         
-        # VÝSTUPNÉ KARTY (NAPÍSANÉ ABSOLÚTNE LINEÁRNE, BEZ JEDINÉHO VNÚTORNÉHO BLOKU)
         trhova_hodnota_safe = ks_bez_dane * aktualna_cena
         cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
         st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
@@ -170,7 +169,7 @@ if uploaded_files:
         st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: `{zisk_mlade:.2f} EUR` | Daň z príjmu (19%): `{dan_19:.2f} EUR` | Zdravotné odvody (14%): `{odvody_14:.2f} EUR` | **Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR**")
         
         # =========================================================================
-        # 🛡️ TRI SAMOSTATNÉ SVIETIACE EXPANDERY (ÚPLNE NA PLOCHO NA KONCI VŠETKÝCH VÝPOČTOV)
+        # 🛡️ TRI SVIETIACE EXPANDERY (ZÁVÄZNE ZAROVNANÉ NA PLOCHO NA ÚPLNOM KONCI)
         # =========================================================================
         st.markdown("##")
         
@@ -178,3 +177,6 @@ if uploaded_files:
         expander_frakcii.write("Tu nájdete kompletný chronologický zoznam vašich nákupov, z ktorých je poskladaná dnešná otvorená pozícia:")
         for r_text in rozpis_textov:
             expander_frakcii.write(r_text)
+            
+        # 📥 TLAČIDLO VLOŽENÉ PLOCHO POD TEXTY (Čisté zlúčenie stringov cez Python \n)
+        expander_frakcii.markdown("---")
