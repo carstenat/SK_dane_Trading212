@@ -28,7 +28,7 @@ else:
     """, unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
+st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií a ročné daňové podklady.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True, key="uploader_main_final")
 
@@ -37,25 +37,38 @@ if uploaded_files:
     for file in uploaded_files:
         zoznam_df.append(pd.read_csv(file))
         
-    df = pd.concat(zoznam_df, ignore_index=True)
-    df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
-    df = df.dropna(subset=['Time', 'Ticker']).sort_values(by='Time').reset_index(drop=True)
+    df_global = pd.concat(zoznam_df, ignore_index=True)
+    df_global['Time'] = pd.to_datetime(df_global['Time'], errors='coerce').dt.tz_localize(None)
+    df_global = df_global.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     
-    df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
-    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
-    df['Withholding tax'] = pd.to_numeric(df['Withholding tax'], errors='coerce').fillna(0.0)
-    df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
+    df_global['No. of shares'] = pd.to_numeric(df_global['No. of shares'], errors='coerce').fillna(0.0)
+    df_global['Total'] = pd.to_numeric(df_global['Total'], errors='coerce').fillna(0.0)
+    df_global['Withholding tax'] = pd.to_numeric(df_global['Withholding tax'], errors='coerce').fillna(0.0)
+    df_global['Ticker_Clean'] = df_global['Ticker'].fillna('').astype(str).str.strip().str.upper()
+    df_global['Rok'] = df_global['Time'].dt.year
+    
+    # 📅 INTERNÝ PREPÍNAČ ROKOV PRE ROČNÉ PODKLADY
+    st.markdown("---")
+    st.header("📅 Výber daňového obdobia (Roku)")
+    dostupne_roky = sorted([int(x) for x in df_global['Rok'].unique() if pd.notna(x)])
+    if not dostupne_roky:
+        dostupne_roky = [2024, 2025, 2026]
+        
+    vybrany_rok = st.radio("Zvoľte rok, za ktorý chcete pripraviť kompletné podklady a kontrolovať sklad:", dostupne_roky, horizontal=True, key="radio_rok_v1")
+    
+    # Filtrujeme globálnu tabuľku pre konkrétny vybraný rok
+    df = df_global[df_global['Rok'] == vybrany_rok].copy().reset_index(drop=True)
     
     databaza_mien = {}
-    for _, riadok in df.iterrows():
+    for _, riadok in df_global.iterrows():
         tick_c = str(riadok['Ticker_Clean'])
         full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
         if tick_c and tick_c != 'nan' and full_name and full_name != 'nan':
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
                 databaza_mien[tick_c] = full_name
 
-    st.markdown("##")
-    st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
+    st.markdown("---")
+    st.header(f"🔍 Podklady a Optimalizátor pre daňový rok {vybrany_rok}")
     
     df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)].copy()
     zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
@@ -75,7 +88,7 @@ if uploaded_files:
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_final")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme v danom roku:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_final")
         with col2:
             aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_final")
         
@@ -104,7 +117,7 @@ if uploaded_files:
         
         skutocny_stav = vstup_vlastnene
         if vstup_vlastnene > max_sklad_dostupny:
-            st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade Trading 212 zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame na vaše reálne maximum.")
+            st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade pre rok {vybrany_rok} zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame.")
             skutocny_stav = max_sklad_dostupny
             
         potrebne_ks = skutocny_stav
@@ -150,7 +163,7 @@ if uploaded_files:
         ks_bez_dane = round(ks_bez_dane, 5)
         ks_mlade = round(ks_mlade, 5)
         
-        st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
+        st.markdown(f"**Vizuálny pomer safe pozície pre rok {vybrany_rok}:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
         vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
         st.progress(max(0.0, min(1.0, vypocitany_pomer)))
         
@@ -158,25 +171,12 @@ if uploaded_files:
         cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
         st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
         
+        st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
+        
         trhova_hodnota_mlade = ks_mlade * aktualna_cena
         zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
         dan_19 = round(zisk_mlade * 0.19, 2)
         odvody_14 = round(zisk_mlade * 0.14, 2)
         celkovy_vypal_statu = dan_19 + odvody_14
-        
-        st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
         st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: `{zisk_mlade:.2f} EUR` | Daň z príjmu (19%): `{dan_19:.2f} EUR` | Zdravotné odvody (14%): `{odvody_14:.2f} EUR` | **Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR**")
         
-        # =========================================================================
-        # 📋 AKCIOVÝ BREAKDOWN (Zostáva natvrdo vybalený na ploche)
-        # =========================================================================
-        st.markdown("---")
-        st.subheader("📋 Detailný rozpis nákupných balíčkov (Frakcií)")
-        
-        csv_string = "\n".join([",".join(row) for row in export_csv_riadky])
-        st.download_button(label="📥 STIAHNUŤ TENTO ROZPIS FRAKCIÍ DO EXCELU (CSV)", data=csv_string.encode('utf-8'), file_name=f"t212_rozpis_frakcii_{vybrany_ticker_pure}.csv", mime="text/csv", key="btn_export_frakcii_v980")
-        
-        st.write("Chronologický prehľad balíčkov na sklade:")
-        for r_text in rozpis_textov:
-            st.write(r_text)
-            
