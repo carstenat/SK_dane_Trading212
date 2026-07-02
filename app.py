@@ -6,7 +6,7 @@ import re
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 💾 TRVALÁ PAMÄŤ CLOUDU (BEZPEČNÝ ZÁMOK PRED VYMAZANÍM)
+# 💾 TRVALÁ PAMÄŤ CLOUDU (OCHRANA PRED RESETOM SÚBOROV)
 # =========================================================================
 if "databaza_transakcii" not in st.session_state:
     st.session_state.databaza_transakcii = None
@@ -14,7 +14,18 @@ if "databaza_transakcii" not in st.session_state:
 if "vybrany_rok" not in st.session_state:
     st.session_state.vybrany_rok = "Všetky"
 
-# Funkcia na bezpečné očistenie textu na čisté float číslo (Odstraňuje EUR, USD, textové meny)
+st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
+st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
+
+uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True, key="uploader_main_final")
+
+if uploaded_files:
+    zoznam_df = []
+    for file in uploaded_files:
+        zoznam_df.append(pd.read_csv(file))
+    st.session_state.databaza_transakcii = pd.concat(zoznam_df, ignore_index=True)
+
+# Funkcia na bezpečné očistenie textu na čisté float číslo
 def bezpecne_cislo(hodnota):
     if pd.isna(hodnota):
         return 0.0
@@ -29,38 +40,20 @@ def bezpecne_cislo(hodnota):
     except:
         return 0.0
 
-# =========================================================================
-# 🎨 PRÉMIOVÝ FINTECH VZHĽAD A SIDEBAR
-# =========================================================================
-st.sidebar.header("⚙️ Nastavenia vzhľadu")
-dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
-
-st.sidebar.header("🔀 Nastavenia zoznamu akcií")
-metoda_zoradenia = st.sidebar.radio(
-    "Zoradiť zoznam spoločností podľa:",
-    options=["Tickeru abecedne", "Názvu spoločnosti abecedne"]
-)
-
-if dark_mode:
-    st.markdown("<style>.stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; } h1, h2, h3, label, p, span { color: #FFFFFF !important; } div[data-testid='stMetric'] { background-color: #1E293B !important; border: 2px solid #475569 !important; border-radius: 12px !important; padding: 14px 18px !important; }</style>", unsafe_allow_html=True)
-else:
-    st.markdown("<style>.stApp { background-color: #FFFFFF !important; color: #1E293B !important; } h1, h2 { color: #0F172A !important; } div[data-testid='stMetric'] { background-color: #F8FAFC !important; border: 2px solid #CBD5E1 !important; border-radius: 12px !important; padding: 14px 18px !important; }</style>", unsafe_allow_html=True)
-
-st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
-
-# 🌟 TRVALÝ NAKLADACÍ MECHANIZMUS: Súbory sa zapíšu do pamäte a už odtiaľ nezmiznú
-uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True, key="uploader_main_final")
-
-if uploaded_files:
-    zoznam_df = []
-    for file in uploaded_files:
-        zoznam_df.append(pd.read_csv(file))
-    st.session_state.databaza_transakcii = pd.concat(zoznam_df, ignore_index=True)
-
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
+    # 🚨 PREDNÁ DIAGNOSTIKA: Tento blok sa vykreslí VŽDY a hneď navrchu!
+    st.markdown("### 🔍 Interná diagnostika tvojho CSV súboru")
+    st.warning("Ak pod týmto blokom vidíš iba prázdne nadpisy, skontroluj tabuľku nižšie. Tvoje CSV stĺpce sa volajú inak, než kód očakáva.")
+    
+    st.write("**Skutočné názvy stĺpcov nájdené v tvojom súbore:**")
+    st.code(list(df.columns))
+    
+    st.write("**Ukážka prvých 3 riadkov tvojich surových dát:**")
+    st.dataframe(df.head(3), use_container_width=True)
+    st.markdown("---")
+
     # 🔍 UNIVERZÁLNE MAPOVANIE VARIÁCIÍ STĹPCOV (SK / EN)
     mapovanie_stlpcov = {}
     flags = {"time": False, "action": False, "ticker": False, "name": False, "shares": False, "price": False, "total": False, "wht": False}
@@ -94,6 +87,7 @@ if st.session_state.databaza_transakcii is not None:
             
     df = df.rename(columns=mapovanie_stlpcov)
     
+    # Fallback pre chýbajúce stĺpce
     if 'Time' not in df.columns: df['Time'] = pd.NaT
     if 'Action' not in df.columns: df['Action'] = 'unknown'
     if 'Ticker' not in df.columns: df['Ticker'] = 'UNKNOWN'
@@ -113,7 +107,6 @@ if st.session_state.databaza_transakcii is not None:
     # =========================================================================
     # 📅 MODUL SELEKCIE DAŇOVÉHO OBDOBIA
     # =========================================================================
-    st.markdown("---")
     st.subheader("📅 Výber daňového obdobia na kontrolu")
     
     roky_v_datach = sorted([int(r) for r in df['Rok'].dropna().unique()])
@@ -133,7 +126,7 @@ if st.session_state.databaza_transakcii is not None:
         df_filtrovane = df[df['Rok'] == int(st.session_state.vybrany_rok)].copy()
 
     # =========================================================================
-    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY (S EXPANDERMI)
+    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY
     # =========================================================================
     df_dividendy = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('dividend', na=False)].copy()
     df_uroky = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('interest', na=False)].copy()
@@ -165,7 +158,7 @@ if st.session_state.databaza_transakcii is not None:
             st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
 
     # =========================================================================
-    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (PREČISTENÝ PLOCHÝ FIFO ENGINE)
+    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (ČISTO ČÍSELNÝ PLOCHÝ FIFO ENGINE)
     # =========================================================================
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
@@ -188,10 +181,27 @@ if st.session_state.databaza_transakcii is not None:
     realizovane_obchody_rok = []
     otvorene_loty_portfolio = {}
 
-    # PLOCHÝ PARSER (Ochrana proti IndentationError)
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
         nakupne_loty = []
         
         for idx, row in df_t.iterrows():
             množstvo = float(row['No. of shares'])
+            total_val = float(row['Total'])
+            cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
+            
+            if množstvo > 0:
+                nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']})
+                
+            if množstvo < 0:
+                množstvo_na_predaj = abs(množstvo)
+                for lot in list(nakupne_loty):
+                    if lot['množstvo'] <= 0 or množstvo_na_predaj <= 0:
+                        continue
+                    
+                    odpredane_množstvo = min(lot['množstvo'], množstvo_na_predaj)
+                    lot['množstvo'] -= odpredane_množstvo
+                    množstvo_na_predaj -= odpredane_množstvo
+                    
+                    prijem = odpredane_množstvo * cena_ks
+                    vydaj = odpredane_množstvo * lot['cena_nakup']
