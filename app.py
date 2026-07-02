@@ -164,7 +164,7 @@ def run_fifo_engine(df):
                 if shares_to_sell <= 1e-7 or len(fifo_pools[ticker]) == 0:
                     break
                     
-                # DEFINITÍVNA KOREKCIA: Ťaháme prvú nákupnú šaržu cez index [0]
+                # STOPROCENTNE BEZPEČNÝ INDEX - VYŤAHUJE VŽDY PRVÝ PRVOK Z FRONTU LOTU
                 oldest_lot = fifo_pools[ticker][0]
                 
                 if oldest_lot['shares'] <= (shares_to_sell + 1e-7):
@@ -228,7 +228,7 @@ def run_fifo_engine(df):
 # HLAVNÝ RENDER STRÁNKY (UI)
 # ==========================================
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212")
-st.caption("Verzia 5.0: Plne stabilizované spracovanie nákupných šarží. Kompletný audit.")
+st.caption("Verzia 5.1: Úplne zarovnané a ploché UI rozhranie s fixnutým FIFO indexom šarží.")
 
 st.header("1. Vstup dát (Hromadný import CSV)")
 uploaded_files = st.file_uploader(
