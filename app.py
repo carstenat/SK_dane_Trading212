@@ -47,17 +47,13 @@ if uploaded_files:
     df_global['Ticker_Clean'] = df_global['Ticker'].fillna('').astype(str).str.strip().str.upper()
     df_global['Rok'] = df_global['Time'].dt.year
     
-    # 📅 INTERNÝ PREPÍNAČ ROKOV PRE ROČNÉ PODKLADY
+    # 📅 GLOBÁLNY PREPÍNAČ DAŇOVÉHO ROKA (Pre dividendy a úroky)
     st.markdown("---")
     st.header("📅 Výber daňového obdobia (Roku)")
     dostupne_roky = sorted([int(x) for x in df_global['Rok'].unique() if pd.notna(x)])
     if not dostupne_roky:
         dostupne_roky = [2024, 2025, 2026]
-        
-    vybrany_rok = st.radio("Zvoľte rok, za ktorý chcete pripraviť kompletné podklady a kontrolovať sklad:", dostupne_roky, horizontal=True, key="radio_rok_v1")
-    
-    # Filtrujeme globálnu tabuľku pre konkrétny vybraný rok
-    df = df_global[df_global['Rok'] == vybrany_rok].copy().reset_index(drop=True)
+    vybrany_rok = st.radio("Zvoľte rok, za ktorý chcete zobraziť podklady pre dividendy a úroky z hotovosti:", dostupne_roky, horizontal=True, key="radio_rok_v2")
     
     databaza_mien = {}
     for _, riadok in df_global.iterrows():
@@ -68,9 +64,9 @@ if uploaded_files:
                 databaza_mien[tick_c] = full_name
 
     st.markdown("---")
-    st.header(f"🔍 Podklady a Optimalizátor pre daňový rok {vybrany_rok}")
+    st.header("🔍 Daňový Optimalizátor pozície (Globálna história skladu)")
     
-    df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)].copy()
+    df_akcie = df_global[df_global['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)].copy()
     zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
     
     if zoznam_tickerov_all:
@@ -88,10 +84,11 @@ if uploaded_files:
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme v danom roku:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_final")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_final")
         with col2:
             aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_final")
         
+        # 🚀 FIFO POČÍTA CEZ KOMPLETNÚ HISTÓRIU (Bez orezania rokmi)
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
         sklad_aktualny = []
@@ -110,14 +107,14 @@ if uploaded_files:
                     if predat_este > 1e-6 and b['shares'] > 0:
                         vziat = min(b['shares'], predat_este)
                         b['shares'] -= vziat
-                        predat_este -= vziat
+                        predat_este -= predat_este_check := vziat
                 sklad_aktualny = [x for x in sklad_aktualny if x['shares'] > 1e-6]
         
         max_sklad_dostupny = sum([x['shares'] for x in sklad_aktualny])
         
         skutocny_stav = vstup_vlastnene
         if vstup_vlastnene > max_sklad_dostupny:
-            st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade pre rok {vybrany_rok} zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame.")
+            st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade Trading 212 zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame na vaše reálne maximum.")
             skutocny_stav = max_sklad_dostupny
             
         potrebne_ks = skutocny_stav
@@ -163,7 +160,7 @@ if uploaded_files:
         ks_bez_dane = round(ks_bez_dane, 5)
         ks_mlade = round(ks_mlade, 5)
         
-        st.markdown(f"**Vizuálny pomer safe pozície pre rok {vybrany_rok}:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
+        st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
         vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
         st.progress(max(0.0, min(1.0, vypocitany_pomer)))
         
@@ -171,12 +168,12 @@ if uploaded_files:
         cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
         st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
         
-        st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
-        
         trhova_hodnota_mlade = ks_mlade * aktualna_cena
         zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
         dan_19 = round(zisk_mlade * 0.19, 2)
         odvody_14 = round(zisk_mlade * 0.14, 2)
         celkovy_vypal_statu = dan_19 + odvody_14
+        
+        st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
         st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: `{zisk_mlade:.2f} EUR` | Daň z príjmu (19%): `{dan_19:.2f} EUR` | Zdravotné odvody (14%): `{odvody_14:.2f} EUR` | **Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR**")
         
