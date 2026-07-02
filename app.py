@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 # ==========================================
 TAX_RATE_SK = 0.19
 HEALTH_INSURANCE_RATE_SK = 0.15
-TAX_EXEMPTION_LIMIT_SK = 500.0  # Oslobodenie podľa § 9 ods. 1 písm. k) ZDP
+TAX_EXEMPTION_LIMIT_SK = 500.0
 
 st.set_page_config(
     page_title="Súkromný PRO Optimalizátor pre Trading 212",
@@ -19,7 +19,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Inicializácia Session State proti nechcenému resetu dát
+# Inicializácia Session State proti resetu dát
 if 'df_raw' not in st.session_state:
     st.session_state.df_raw = None
 if 'selected_year' not in st.session_state:
@@ -34,21 +34,23 @@ def fetch_ecb_daily_rates_for_year(year):
     rates = {'USD': {}, 'GBP': {}}
     try:
         url = "https://europa.eu"
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=5)
         if response.status_code == 200:
             root = ET.fromstring(response.content)
             namespaces = {'ns': 'http://ecb.int'}
             
             for cube_time in root.findall('.//ns:Cube[@time]', namespaces):
                 date_str = cube_time.get('time')
-                date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-                
-                if date_obj.year == int(year):
-                    for cube_curr in cube_time.findall('ns:Cube', namespaces):
-                        currency = cube_curr.get('currency')
-                        rate_val = float(cube_curr.get('rate'))
-                        if currency in rates:
-                            rates[currency][date_str] = rate_val
+                try:
+                    date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+                    if date_obj.year == int(year):
+                        for cube_curr in cube_time.findall('ns:Cube', namespaces):
+                            currency = cube_curr.get('currency')
+                            rate_val = float(cube_curr.get('rate'))
+                            if currency in rates:
+                                rates[currency][date_str] = rate_val
+                except Exception:
+                    continue
     except Exception:
         pass
     return rates
@@ -60,7 +62,7 @@ def get_ecb_rate(date_obj, currency, year_rates):
     
     curr_dict = year_rates.get(currency, {})
     if not curr_dict:
-        return 1.10  # Bezpečný fallback kurz pre USD pri výpadku API
+        return 1.10
         
     for i in range(6):
         check_date = (date_obj - timedelta(days=i)).strftime("%Y-%m-%d")
@@ -70,7 +72,6 @@ def get_ecb_rate(date_obj, currency, year_rates):
     return 1.10
 
 def clean_numeric_string(val):
-    """Vyčistí textové reťazce, odstráni znaky mien a opraví európske čiarky."""
     if pd.isna(val):
         return 0.0
     if isinstance(val, (int, float)):
@@ -93,7 +94,6 @@ def clean_numeric_string(val):
         return 0.0
 
 def normalize_columns(df):
-    """Unifikuje slovenské a anglické názvy stĺpcov z Trading 212."""
     mapping = {
         'time': 'Time', 'čas': 'Time', 'cas': 'Time',
         'action': 'Action', 'operácia': 'Action', 'operacia': 'Action', 'typ': 'Action',
@@ -129,7 +129,6 @@ def normalize_columns(df):
     return df
 
 def process_uploaded_files(uploaded_files):
-    """Zlúči a kompletne očistí všetky nahraté CSV súbory."""
     df_list = []
     for file in uploaded_files:
         try:
@@ -141,7 +140,7 @@ def process_uploaded_files(uploaded_files):
                     current_df['Currency_Detected'] = 'GBP'
             df_list.append(current_df)
         except Exception as e:
-            st.error(f"Chyba pri načítaní súboru {file.name}: {e}")
+            st.error(f"Chyba pri načítaní súboru: {e}")
             
     if not df_list:
         return None
@@ -167,7 +166,6 @@ def process_uploaded_files(uploaded_files):
 # STRIKTNÝ MULTI-CURRENCY FIFO ENGINE
 # ==========================================
 def run_fifo_engine(df, cached_rates):
-    """Páruje predaje proti nákupom (FIFO) so zohľadnením 1-ročného časového testu."""
     action_pattern = r'(buy|sell|nákup|nakup|predaj)'
     valid_df = df[
         df['Ticker'].notna() & 
@@ -188,7 +186,6 @@ def run_fifo_engine(df, cached_rates):
         currency = row['Currency']
         name = row['Name'] if pd.notna(row['Name']) else ticker
         
-        # Denná konverzia kurzu podľa ECB
         rate = get_ecb_rate(row_date.date(), currency, cached_rates)
         price_eur = price_raw / rate if currency != 'EUR' else price_raw
         
@@ -196,8 +193,8 @@ def run_fifo_engine(df, cached_rates):
             fifo_pools[ticker] = []
             lot_counters[ticker] = 0
             
-        # NÁKUP (Prírastok do fronty)
         if 'buy' in action or 'nákup' in action or 'nakup' in action:
+            lot_counters[ticker].append if isinstance(lot_counters[ticker], list) else None
             lot_counters[ticker] += 1
             fifo_pools[ticker].append({
                 'date': row_date,
@@ -208,12 +205,12 @@ def run_fifo_engine(df, cached_rates):
                 'currency_orig': currency
             })
             
-        # PREDAJ (Párovanie FIFO z najstaršieho lotu)
         elif 'sell' in action or 'predaj' in action:
             shares_to_sell = shares
             
-            while shares_to_sell > 0 and fifo_pools[ticker]:
-                oldest_lot = fifo_pools[ticker][0]
+            # OPRAVA: korektné prechádzanie a odoberanie z listu fifo_pools[ticker]
+            while shares_to_sell > 0 and len(fifo_pools[ticker]) > 0:
+                oldest_lot = fifo_pools[ticker][0] # <--- FIX: Vyberie prvý (najstarší) prvok
                 
                 if oldest_lot['shares'] <= shares_to_sell:
                     matched_shares = oldest_lot['shares']
@@ -249,3 +246,9 @@ def run_fifo_engine(df, cached_rates):
                     'Rok_Predaja': row_date.year
                 })
                 
+            if shares_to_sell > 0:
+                realized_trades.append({
+                    'Ticker': ticker,
+                    'Spoločnosť': name,
+                    'Kusy': shares_to_sell,
+                    'Dátum nákupu': 'Neznámy',
