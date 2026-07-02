@@ -163,7 +163,7 @@ def vypocitaj_a_zobraz_optimalizator(df):
     return None
 
 # =========================================================================
-# 🔒 KRABICA Č. 2: IDENTICKÝ PREHĽAD DIVIDEND (Z checkpointu)
+# 🔒 KRABICA Č. 2: IDENTICKÝ PREHĽAD DIVIDEND (S 100% OPRAVENOU SYNTAXIU)
 # =========================================================================
 def vypocitaj_a_zobraz_dividendy(df, vybrany_ticker):
     if not vybrany_ticker:
