@@ -5,7 +5,7 @@ from datetime import datetime
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 💾 TRVALÁ PAMÄŤ CLOUDU (OCHRANA PRED RESETOM SÚBOROV)
+# 💾 TRVALÁ PAMÄŤ CLOUDU (OCHRANA PRED RESETOM S SÚBOROV)
 # =========================================================================
 if "databaza_transakcii" not in st.session_state:
     st.session_state.databaza_transakcii = None
@@ -77,7 +77,6 @@ if st.session_state.databaza_transakcii is not None:
             
     df = df.rename(columns=mapovanie_stlpcov)
     
-    # Fallback pre chýbajúce stĺpce
     if 'Time' not in df.columns: df['Time'] = pd.NaT
     if 'Action' not in df.columns: df['Action'] = 'unknown'
     if 'Ticker' not in df.columns: df['Ticker'] = 'UNKNOWN'
@@ -86,7 +85,6 @@ if st.session_state.databaza_transakcii is not None:
     if 'Total' not in df.columns: df['Total'] = 0.0
     if 'Withholding tax' not in df.columns: df['Withholding tax'] = 0.0
     
-    # Pretypovanie a čistenie
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df['Rok'] = df['Time'].dt.year
     df['Action_Clean'] = df['Action'].fillna('').astype(str).str.strip().str.lower()
@@ -148,18 +146,20 @@ if st.session_state.databaza_transakcii is not None:
             st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
 
     # =========================================================================
-    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (ČISTO ČÍSELNÝ FIFO ENGINE)
+    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (ČISTO ČÍSELNÝ PLOCHÝ FIFO ENGINE)
     # =========================================================================
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
-    # Vyčistíme a pripravíme riadky pre spracovanie akcií
+    # 🌟 NATÍVNA FILTRÁCIA PANDAS: Dividendové a úrokové riadky odstránime hneď pred cyklami
     df_akcie_len = df.dropna(subset=['Time']).copy()
+    df_akcie_len = df_akcie_len[~df_akcie_len['Action_Clean'].str.contains('dividend|interest', na=False)]
     df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].fillna('UNKNOWN').astype(str).str.strip().str.upper()
     df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != '']
     df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != 'UNKNOWN']
     df_akcie_len = df_akcie_len.sort_values(by='Time').reset_index(drop=True)
     
+    # Generovanie databázy mien spoločností
     databaza_mien = {}
     for _, riadok in df_akcie_len.iterrows():
         tick_c = riadok['Ticker_Clean']
@@ -172,7 +172,7 @@ if st.session_state.databaza_transakcii is not None:
     realizovane_obchody_rok = []
     otvorene_loty_portfolio = {}
 
-    # MATEMATICKÝ FIFO PRÍSTUP (Úplne ignoruje názvy textových stĺpcov, pozerá len kusy)
+    # MATEMATICKÝ FIFO PRÍSTUP (Sploštený prechod polí bez rizikových if podmienok)
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
         nakupne_loty = []
@@ -180,7 +180,5 @@ if st.session_state.databaza_transakcii is not None:
         for idx, row in df_t.iterrows():
             množstvo = float(row['No. of shares'])
             total_val = float(row['Total'])
-            akcia_text = str(row['Action_Clean'])
+            cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
             
-            # Ak riadok obsahuje dividendu alebo úrok, preskočíme ho v akciovom engine
-            if 'dividend' in akcia_text or 'interest' in akcia_text:
