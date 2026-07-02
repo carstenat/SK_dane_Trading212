@@ -57,7 +57,8 @@ if uploaded_files:
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     
-    df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)].copy()
+    # 🛡️ NEPRIESTRELNÝ OBRÁTENÝ FILTER: Vyhodíme len dividendy a úroky, všetko ostatné s kusmi zostáva ako akcia
+    df_akcie = df[~df['Action'].str.lower().str.contains('dividend|dividenda|interest|úrok|urok', na=False)].copy()
     zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
     
     if zoznam_tickerov_all:
@@ -83,15 +84,15 @@ if uploaded_files:
         
         sklad_aktualny = []
         for _, riadok in df_ticker.iterrows():
-            typ = str(riadok['Action']).lower()
             shares = float(riadok['No. of shares'])
             total = float(riadok['Total'])
             datum = riadok['Time']
             
-            if 'buy' in typ or 'nákup' in typ or 'nakup' in typ:
-                if shares > 0.00001:
-                    sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
-            elif 'sell' in typ or 'predaj' in typ or shares < 0:
+            # Ak sú kusy kladné, ide o prírastok do skladu (akýkoľvek typ nákupu)
+            if shares > 0.00001:
+                sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
+            # Ak sú kusy záporné, ide o odpis zo skladu (akýkoľvek typ predaja)
+            elif shares < -0.00001:
                 predat_este = abs(shares)
                 for b in sklad_aktualny:
                     if predat_este > 1e-6 and b['shares'] > 0:
@@ -177,5 +178,3 @@ if uploaded_files:
     df_div = df[df['Action'].str.lower().str.contains('dividend|dividenda', na=False)].copy()
     if len(df_div) > 0:
         st.markdown("##")
-        with st.expander("💰 Zobraziť podklady pre Dividendy (Globálny sumár z CSV)"):
-            total_brutto = 0.0
