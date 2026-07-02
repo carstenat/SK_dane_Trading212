@@ -70,7 +70,6 @@ if st.session_state.databaza_transakcii is not None:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df['Rok'] = df['Time'].dt.year
     
-    # Bezpečné čistenie textových polí bez dropna (aby sme nezmazali hotovosť)
     df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
     df['Action_Clean'] = df['Action'].fillna('').astype(str).str.strip()
     
@@ -145,7 +144,6 @@ if st.session_state.databaza_transakcii is not None:
         else:
             st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
 
-    # Safe-typing pre matematické operácie na akcie
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
 
@@ -155,7 +153,6 @@ if st.session_state.databaza_transakcii is not None:
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
-    # Filtrujeme prázdne riadky iba pre potreby akciového FIFO enginu, pôvodné df ostáva nedotknuté
     df_akcie_len = df.dropna(subset=['Time']).copy()
     df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != '']
     df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != 'NAN'].sort_values(by='Time').reset_index(drop=True)
@@ -173,15 +170,10 @@ if st.session_state.databaza_transakcii is not None:
             akcia = str(row['Action_Clean']).lower()
             množstvo = float(row['No. of shares'])
             total_val = float(row['Total'])
-            
             cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
             
             if 'buy' in akcia:
-                lot = {
-                    'množstvo': množstvo,
-                    'cena_nakup': cena_ks,
-                    'datum_nakup': row['Time']
-                }
+                lot = {'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']}
                 nakupne_loty.append(lot)
                 
             elif 'sell' in akcia:
@@ -195,3 +187,8 @@ if st.session_state.databaza_transakcii is not None:
                         množstvo_na_predaj -= odpredane_množstvo
                         nakupne_loty.pop(0)
                     else:
+                        odpredane_množstvo = množstvo_na_predaj
+                        aktualny_lot['množstvo'] -= odpredane_množstvo
+                        množstvo_na_predaj = 0
+                        
+                    prijem = odpredane_množstvo * cena_ks
