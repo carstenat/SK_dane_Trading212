@@ -33,7 +33,7 @@ def fetch_ecb_daily_rates_for_year(year):
     rates = {'USD': {}, 'GBP': {}}
     try:
         url = "https://europa.eu"
-        response = requests.get(url, timeout=5)
+        response = requests.get(url, timeout=3)
         if response.status_code == 200:
             root = ET.fromstring(response.content)
             namespaces = {'ns': 'http://ecb.int'}
@@ -145,7 +145,7 @@ def process_uploaded_files(uploaded_files):
     return combined_df
 
 # ==========================================
-# STABILNÉ LINEÁRNE FIFO JADRO (OPRAVENÝ BUG INDEXU [0])
+# STABILNÉ LINEÁRNE FIFO JADRO (OPRAVENÝ BUG INDEXU)
 # ==========================================
 def run_fifo_engine(df, cached_rates):
     action_pattern = r'(buy|sell|nákup|nakup|predaj)'
@@ -200,7 +200,7 @@ def run_fifo_engine(df, cached_rates):
                 if shares_to_sell <= 1e-7 or len(fifo_pools[ticker]) == 0:
                     break
                     
-                # VELKÁ OPRAVA: [0] vytiahne prvý konkrétny dictionary objekt z poľa
+                # DEFINTÍVNA OPRAVA: vytiahne prvý konkrétny dictionary objekt indexom [0]
                 oldest_lot = fifo_pools[ticker][0]
                 
                 if oldest_lot['shares'] <= (shares_to_sell + 1e-7):
@@ -235,7 +235,6 @@ def run_fifo_engine(df, cached_rates):
                 t_taxable.append(taxable_profit)
                 t_years.append(row_date.year)
                 
-            # Ak sa predalo viac ako sa reálne nakúpilo (chýbajúca história)
             if shares_to_sell > 1e-7:
                 t_tickers.append(ticker)
                 t_names.append(name)
@@ -246,4 +245,5 @@ def run_fifo_engine(df, cached_rates):
                 t_revenue.append(shares_to_sell * price_eur)
                 t_costs.append(0.0)
                 t_profit.append(0.0)
-
+                t_exempt.append('Nie')
+                t_taxable.append(0.0)
