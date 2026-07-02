@@ -55,7 +55,7 @@ if uploaded_files:
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
                 databaza_mien[tick_c] = full_name
 
-    # 📅 TRI ROČNÉ ZÁLOŽKY (ZÁVÄZNÁ IZOLÁCIA PRE KAŽDÝ ROK NAŽIVO)
+    # 📅 TRI ROČNÉ ZÁLOŽKY
     tab2024, tab2025, tab2026 = st.tabs(["📅 Daňový rok 2024", "📅 Daňový rok 2025", "📅 Daňový rok 2026"])
     
     roky_zoznam = [2024, 2025, 2026]
@@ -68,7 +68,6 @@ if uploaded_files:
         with r_tab:
             st.header(f"Optimalizátor a podklady pre rok {r_rok}")
             
-            # Filtrujeme transakcie akcií chronologicky do konca zvoleného daňového roka
             df_akcie = df_global[(df_global['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)) & (df_global['Rok'] <= r_rok)].copy()
             zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
             
@@ -162,11 +161,11 @@ if uploaded_files:
                 ks_bez_dane = round(ks_bez_dane, 5)
                 ks_mlade = round(ks_mlade, 5)
                 
-                # Vykreslenie vizuálneho stavu (Umiestnené natvrdo na ploche záložky)
                 st.markdown(f"**Vizuálny pomer safe pozície pre rok {r_rok}:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
                 vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
                 st.progress(max(0.0, min(1.0, vypocitany_pomer)))
                 
-                # 🔓 ZELENÁ KARTA - Zobrazí sa vždy navrchu plochy
-                trhova_hodnota_safe = ks_bez_dane * aktualna_cena
-                cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
+                # 🔓 BEZPEČNÁ ZELENÁ KARTA - Násobenie beží len ak je cena zadaná
+                if aktualna_cena > 0:
+                    trhova_hodnota_safe = ks_bez_dane * aktualna_cena
+                    cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
