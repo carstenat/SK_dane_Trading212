@@ -67,10 +67,15 @@ def normalize_columns(df):
                     renamed_cols[col] = target
                     break
     df = df.rename(columns=renamed_cols)
-    required_keys = ['Time', 'Action', 'Ticker', 'Name', 'Shares', 'PricePerShare', 'Total', 'Currency']
+    
+    # OCHRANA: Ak stĺpec Currency nevznikol mapovaním, natvrdo ho vytvoríme s hodnotou EUR
+    if 'Currency' not in df.columns:
+        df['Currency'] = 'EUR'
+        
+    required_keys = ['Time', 'Action', 'Ticker', 'Name', 'Shares', 'PricePerShare', 'Total']
     for req in required_keys:
         if req not in df.columns:
-            df[req] = 'EUR' if req == 'Currency' else np.nan
+            df[req] = np.nan
     return df
 
 def process_uploaded_files(uploaded_files):
@@ -88,6 +93,7 @@ def process_uploaded_files(uploaded_files):
     combined_df = pd.concat(df_list, ignore_index=True)
     combined_df = normalize_columns(combined_df)
     
+    # Bezpečné ošetrenie textu a konverzia na veľké písmená
     combined_df['Currency'] = combined_df['Currency'].fillna('EUR').astype(str).str.upper().str.strip()
     combined_df['Shares'] = combined_df['Shares'].apply(clean_numeric_string)
     combined_df['PricePerShare'] = combined_df['PricePerShare'].apply(clean_numeric_string)
@@ -98,7 +104,7 @@ def process_uploaded_files(uploaded_files):
     return combined_df
 
 # ==========================================
-# STABILNÉ LINEÁRNE FIFO JADRO (BEZ KRAŠOV)
+# STABILNÉ LINEÁRNE FIFO JADRO
 # ==========================================
 def run_fifo_engine(df):
     action_pattern = r'(buy|sell|nákup|nakup|predaj)'
@@ -121,14 +127,13 @@ def run_fifo_engine(df):
         action = str(row['Action']).lower()
         row_date = row['Time']
         shares = abs(row['Shares'])
-        price_eur = row['PricePerShare']  # Počítame s natívnou cenou z CSV
+        price_eur = row['PricePerShare']
         name = row['Name'] if pd.notna(row['Name']) else ticker
         
         if ticker not in fifo_pools:
             fifo_pools[ticker] = []
             lot_counters[ticker] = 0
             
-        # NÁKUP: Pridanie novej šarže
         if 'buy' in action or 'nákup' in action or 'nakup' in action:
             lot_counters[ticker] += 1
             fifo_pools[ticker].append({
@@ -140,7 +145,6 @@ def run_fifo_engine(df):
                 'currency_orig': row['Currency']
             })
             
-        # PREDAJ: Bezpečné lineárne párovanie
         elif 'sell' in action or 'predaj' in action:
             shares_to_sell = shares
             loop_limit = len(fifo_pools[ticker])
@@ -149,7 +153,6 @@ def run_fifo_engine(df):
                 if shares_to_sell <= 1e-7 or len(fifo_pools[ticker]) == 0:
                     break
                     
-                # FIX: Natvrdo vyťahujeme prvý konkrétny slovník z poľa cez index 0
                 oldest_lot = fifo_pools[ticker][0]
                 
                 if oldest_lot['shares'] <= (shares_to_sell + 1e-7):
@@ -213,7 +216,7 @@ def run_fifo_engine(df):
 # HLAVNÝ BEZPEČNÝ RENDER STRÁNKY (UI)
 # ==========================================
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212")
-st.caption("Verzia 4.0: Odstránené sieťové API a ošetrené indexovanie šarží. Absolútna stabilita štartu.")
+st.caption("Verzia 4.1: Opravená detekcia meny pri chýbajúcom stĺpci.")
 
 st.header("1. Vstup dát (Hromadný import CSV)")
 uploaded_files = st.file_uploader(
@@ -226,17 +229,14 @@ if uploaded_files:
     parsed_df = process_uploaded_files(uploaded_files)
     if parsed_df is not None:
         st.session_state.df_raw = parsed_df
-        st.success("Dáta úspešne načítané.")
+        st.success("Dáta úspešne spracované.")
 
-# KĽÚČOVÁ OCHRANA: Ak v stave nie sú dáta, kód sa tu natvrdo zastaví a nevyvolá bielu obrazovku
 if st.session_state.df_raw is None:
     st.info("Na aktiváciu aplikácie nahrajte aspoň jeden CSV súbor exportu z Trading 212 vyššie.")
     st.stop()
 
-# Ak dáta existujú, bezpečne pokračujeme vo vykresľovaní zvyšku stránky
 df_main = st.session_state.df_raw
 
-# Spustenie stabilného bezchybného engine
 try:
     df_trades, open_lots_pool = run_fifo_engine(df_main)
 except Exception as fatal_err:
@@ -255,4 +255,11 @@ for idx, yr in enumerate(available_years):
         st.session_state.selected_year = yr
 
 st.write(f"Aktívne daňové obdobie: **{st.session_state.selected_year}**")
+
+if st.session_state.selected_year == "Všetky":
+    df_filtered_trades = df_trades
+else:
+    target_year = int(st.session_state.selected_year)
+    df_filtered_trades = df_trades[df_trades['Rok_Predaja'] == target_year] if not df_trades.empty else pd.DataFrame()
+
 
