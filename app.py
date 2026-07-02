@@ -15,6 +15,7 @@ if dark_mode:
         <style>
         .stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; }
         h1, h2, h3, label, p, span { color: #FFFFFF !important; }
+        div[data-testid="stAppViewContainer"] { background-color: #0B0F19 !important; }
         div[data-testid="stMetric"] { background-color: #1E293B !important; border: 2px solid #475569 !important; border-radius: 12px !important; padding: 14px 18px !important; }
         </style>
     """, unsafe_allow_html=True)
@@ -57,8 +58,8 @@ if uploaded_files:
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     
-    # 🛡️ NEPRIESTRELNÝ OBRÁTENÝ FILTER: Vyhodíme len dividendy a úroky, všetko ostatné s kusmi zostáva ako akcia
-    df_akcie = df[~df['Action'].str.lower().str.contains('dividend|dividenda|interest|úrok|urok', na=False)].copy()
+    # 🛡️ UNIVERZÁLNY AKCIOVÝ FILTER (Slovenská aj anglická mutácia Action)
+    df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)].copy()
     zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
     
     if zoznam_tickerov_all:
@@ -84,15 +85,15 @@ if uploaded_files:
         
         sklad_aktualny = []
         for _, riadok in df_ticker.iterrows():
+            typ = str(riadok['Action']).lower()
             shares = float(riadok['No. of shares'])
             total = float(riadok['Total'])
             datum = riadok['Time']
             
-            # Ak sú kusy kladné, ide o prírastok do skladu (akýkoľvek typ nákupu)
-            if shares > 0.00001:
-                sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
-            # Ak sú kusy záporné, ide o odpis zo skladu (akýkoľvek typ predaja)
-            elif shares < -0.00001:
+            if 'buy' in typ or 'nákup' in typ or 'nakup' in typ:
+                if shares > 0.00001:
+                    sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
+            elif 'sell' in typ or 'predaj' in typ or shares < 0:
                 predat_este = abs(shares)
                 for b in sklad_aktualny:
                     if predat_este > 1e-6 and b['shares'] > 0:
@@ -119,6 +120,7 @@ if uploaded_files:
                 vydavok_mladeho_balika = 0.0
                 
                 rozpis_textov = []
+                export_csv_riadky = [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup", "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
                 
                 for n in sklad_aktualny:
                     if potrebne_ks < 1e-5:
@@ -140,6 +142,7 @@ if uploaded_files:
                         vydavok_safe_balika += cena_balika
                         riadok_prehladu = f"🟢 **BEZ DANE** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Netreba čakať (Oslobodené)"
                         rozpis_textov.append(riadok_prehladu)
+                        export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Bez dane", "Uz oslobodene", "0 dni"])
                     else:
                         ks_mlade += vziat_ks
                         vydavok_mladeho_balika += cena_balika
@@ -147,17 +150,24 @@ if uploaded_files:
                         zostava_dni = 365 - vek_dni
                         riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
                         rozpis_textov.append(riadok_prehladu)
+                        export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Zdanuje sa", d_oslobodenia, f"{zostava_dni} dni"])
                 
                 ks_bez_dane = round(ks_bez_dane, 5)
                 ks_mlade = round(ks_mlade, 5)
                 
                 st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
-                st.progress(float(ks_bez_dane / skutocny_stav))
                 
+                # 🛡️ NEPRIESTRELNÁ POISTKA PROTI CHYBE PROGRESS VALUE (Hodnota nikdy nepresiahne 1.0)
+                vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
+                safe_pomer = max(0.0, min(1.0, vypocitany_pomer))
+                st.progress(safe_pomer)
+                
+                # 🔓 ZELENÁ KARTA
                 trhova_hodnota_safe = ks_bez_dane * aktualna_cena
                 cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
                 st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
                 
+                # 🔓 ORANŽOVO-ŽLTÁ VÝSTRAHA
                 trhova_hodnota_mlade = ks_mlade * aktualna_cena
                 zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
                 dan_19 = round(zisk_mlade * 0.19, 2)
@@ -165,16 +175,3 @@ if uploaded_files:
                 celkovy_vypal_statu = dan_19 + odvody_14
                 
                 st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
-                st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: {zisk_mlade:.2f} EUR | Daň z príjmu (19%): {dan_19:.2f} EUR | Zdravotné odvody (14%): {odvody_14:.2f} EUR | Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR")
-                
-                with st.expander("📋 Zobraziť detailný rozpis nákupných balíčkov (Frakcií)"):
-                    st.write("Tu nájdete kompletný chronologický zoznam vašich nákupov, z ktorých je poskladaná dnešná otvorená pozícia:")
-                    for r_text in rozpis_textov:
-                        st.write(r_text)
-                        
-    # =========================================================================
-    # 💰 GLOBALNE ZAROVNANÉ SEKCIE (BEZ AKÝCHKOĽVEK RISKANTHÝCH ODSADENÍ)
-    # =========================================================================
-    df_div = df[df['Action'].str.lower().str.contains('dividend|dividenda', na=False)].copy()
-    if len(df_div) > 0:
-        st.markdown("##")
