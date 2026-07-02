@@ -187,11 +187,11 @@ if st.session_state.databaza_transakcii is not None:
     realizovane_obchody_rok = []
     otvorene_loty_portfolio = {}
 
-    # ✔️ STRIKTNE PLOCHÝ FIFO PRECHOD POLÍ BEZ NEBEZPEČNÝCH BLOCKOV 'TRY/EXCEPT' S CHYBNÝM VNORENÍM
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
         nakupne_loty = []
-        
         for idx, row in df_t.iterrows():
             množstvo = float(row['No. of shares'])
             total_val = float(row['Total'])
+            cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
+            if množstvo > 0:
