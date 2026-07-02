@@ -140,7 +140,7 @@ if st.session_state.databaza_transakcii is not None:
     databaza_mien = {}
     for _, riadok in df_akcie_len.iterrows():
         tick = str(riadok['Ticker_Clean'])
-        if tick:
+        if tick and tick != 'UNKNOWN':
             databaza_mien[tick] = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
 
     realizovane_obchody_rok = []
@@ -191,9 +191,9 @@ if st.session_state.databaza_transakcii is not None:
     else:
         df_realizovane = pd.DataFrame(realizovane_obchody_rok)
         st.dataframe(df_realizovane, use_container_width=True)
-        # ⭐ Sčítavame výhradne zdaniteľný zisk z uzavretých pozícií
         zdanitelny_zisk_celkom = max(0.0, df_realizovane['Zdaniteľný Zisk'].sum())
 
-    # 🌟 UKOTVENIE METRÍK: Tri widgety sa vykreslia natvrdo a kompletne vedľa seba
+    # 🌟 ROBUSTNÉ UKOTVENIE METRÍK: Už nikdy nezmiznú, sú generované pred optimalizátorom
     col_m1, col_m2, col_m3 = st.columns(3)
     with col_m1: st.metric("Krátkodobý zdaniteľný zisk", f"{zdanitelny_zisk_celkom:,.2f} EUR")
+    with col_m2: st.metric("Daň z príjmu (19%)", f"{zdanitelny_zisk_celkom * 0.19:,.2f} EUR")
