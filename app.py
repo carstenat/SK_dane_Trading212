@@ -64,6 +64,16 @@ if st.session_state.databaza_transakcii is not None:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df['Rok'] = df['Time'].dt.year
     
+    # Pre-processing pre korektné názvy akcií
+    df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
+    databaza_mien = {}
+    for _, riadok in df.iterrows():
+        tick_c = str(riadok['Ticker_Clean'])
+        full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
+        if tick_c and tick_c != 'nan' and full_name and full_name != 'nan':
+            if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
+                databaza_mien[tick_c] = full_name
+
     # =========================================================================
     # 📅 MODUL SELEKCIE DAŇOVÉHO OBDOBIA (Tlačidlá)
     # =========================================================================
@@ -73,24 +83,21 @@ if st.session_state.databaza_transakcii is not None:
     roky_v_datach = sorted([int(r) for r in df['Rok'].dropna().unique()])
     moznosti_rokov = ["Všetky"] + [str(r) for r in roky_v_datach]
     
-    # Horizontálne rozloženie tlačidiel pre roky
     cols_roky = st.columns(len(moznosti_rokov))
     for idx, r_opt in enumerate(moznosti_rokov):
         with cols_roky[idx]:
-            # Ak je tlačidlo aktívne, má vizuálne odlíšenie (Streamlit type)
             b_type = "primary" if st.session_state.vybrany_rok == r_opt else "secondary"
             if st.button(f"Rok {r_opt}" if r_opt != "Všetky" else "Všetky obdobia", type=b_type, key=f"btn_rok_{r_opt}"):
                 st.session_state.vybrany_rok = r_opt
                 st.rerun()
 
-    # Filtrovanie pre dividendy a úroky na základe vybraného roku
     if st.session_state.vybrany_rok == "Všetky":
         df_filtrovane = df.copy()
     else:
         df_filtrovane = df[df['Rok'] == int(st.session_state.vybrany_rok)].copy()
 
     # =========================================================================
-    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY (Filtrované podľa tlačidla roku)
+    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY (S VRÁTENÝMI EXPANDERMI)
     # =========================================================================
     df_dividendy = df_filtrovane[df_filtrovane['Action'].str.lower().str.contains('dividend', na=False)].copy()
     df_uroky = df_filtrovane[df_filtrovane['Action'].str.lower().str.contains('interest', na=False)].copy()
@@ -107,6 +114,9 @@ if st.session_state.databaza_transakcii is not None:
             st.metric("Celkové pripísané dividendy (Brutto)", f"{total_div_gross:.2f} EUR")
             st.metric("Zahraničná zrazená daň (WHT)", f"{total_div_wht:.2f} EUR")
             st.write(f"**Čisté vyplatené dividendy (Netto):** {total_div_net:.2f} EUR")
+            
+            with st.expander("Zobraziť históriu dividend pro toto obdobie"):
+                st.dataframe(df_dividendy[['Time', 'Ticker', 'Action', 'Total']].head(100))
         else:
             st.info("Pre zvolené obdobie sa nenašli žiadne dividendy.")
             
@@ -120,22 +130,16 @@ if st.session_state.databaza_transakcii is not None:
             st.metric("Pripísané denné úroky (Brutto)", f"{total_interest_brutto:.2f} EUR")
             st.metric("Daňová povinnosť v SR (19%)", f"{dan_z_urokov:.2f} EUR")
             st.write(f"**Čistý výnos z úrokov po zdanení:** {total_interest_netto:.2f} EUR")
+            
+            with st.expander("Zobraziť históriu pripísaných úrokov pre toto obdobie"):
+                st.dataframe(df_uroky[['Time', 'Action', 'Total']].head(100))
         else:
             st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
 
-    # Spracovanie dát pre akcie
+    # Zoradenie celej databázy podľa času pre správny výpočet FIFO lotov
     df = df.dropna(subset=['Time', 'Ticker']).sort_values(by='Time').reset_index(drop=True)
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
-    df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
-        
-    databaza_mien = {}
-    for _, riadok in df.iterrows():
-        tick_c = str(riadok['Ticker_Clean'])
-        full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
-        if tick_c and tick_c != 'nan' and full_name and full_name != 'nan':
-            if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
-                databaza_mien[tick_c] = full_name
 
     # =========================================================================
     # 🔍 HLAVNÝ OPTIMALIZÁTOR A FIFO ENGINE
@@ -146,13 +150,23 @@ if st.session_state.databaza_transakcii is not None:
     zoznam_tickerov = sorted([t for t in df['Ticker_Clean'].unique() if t != ''])
     
     if zoznam_tickerov:
-        vybrany_ticker = st.selectbox("Vyberte akciový ticker pre detailnú analýzu:", zoznam_tickerov)
+        # Vytvorenie pekných popisov pre dropdown (Ticker - Názov spoločnosti)
+        mapovanie_zobrazenia = {}
+        list_na_zobrazenie = []
         
-        df_ticker = df[df['Ticker_Clean'] == vybrany_ticker].copy()
-        meno_akcie = databaza_mien.get(vybrany_ticker, "Neznámy titul")
-        st.subheader(f"FIFO analýza lotov pre: {vybrany_ticker} - {meno_akcie}")
+        for t in zoznam_tickerov:
+            meno_firmy = databaza_mien.get(t, "Neznámy titul")
+            retazec = f"{t} - {meno_firmy}"
+            mapovanie_zobrazenia[retazec] = t
+            list_na_zobrazenie.append(retazec)
+            
+        vybrany_text = st.selectbox("Vyberte akciu alebo ETF pre detailnú analýzu:", list_na_zobrazenie)
+        skutocny_ticker = mapovanie_zobrazenia[vybrany_text]
         
-        # Rozdelenie transakcií na nákupy a predaje pre celú históriu kvôli FIFO párovaniu
+        df_ticker = df[df['Ticker_Clean'] == skutocny_ticker].copy()
+        st.subheader(f"FIFO analýza lotov pre: {vybrany_text}")
+        
+        # Filtrujeme kompletnú históriu BUY a SELL pre daný ticker kvôli správnemu priradeniu FIFO
         vsetky_transakcie = df_ticker[df_ticker['Action'].str.lower().str.contains('buy|sell', na=False)].copy()
         
         nakupne_loty = []
@@ -177,20 +191,9 @@ if st.session_state.databaza_transakcii is not None:
                     })
             elif 'sell' in akcia:
                 zostava_na_predaj = kusy
-                docasny_zisk_z_predaja = 0.0
-                docasne_naklady_na_predaj = 0.0
                 
-                # Párovanie FIFO z nákupných lotov
                 for lot in nakupne_loty:
                     if zostava_na_predaj <= 0.00001:
                         break
                         
                     if lot["Kusy_Zostatok"] > 0.00001:
-                        odcerpane_kusy = min(zostava_na_predaj, lot["Kusy_Zostatok"])
-                        
-                        nakupna_cena_sarze = odcerpane_kusy * lot["Cena_Za_Kus"]
-                        predajna_cena_sarze = odcerpane_kusy * (celkovy_objem / kusy if kusy > 0.00001 else 0.0)
-                        
-                        zisk_z_tejto_casti = predajna_cena_sarze - nakupna_cena_sarze
-                        
-                        # Časový test pre predanú časť
