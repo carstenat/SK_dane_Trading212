@@ -155,7 +155,7 @@ if st.session_state.databaza_transakcii is not None:
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
-    # Tu filtrujeme prázdne riadky iba pre potreby akciového FIFO enginu, pôvodné df ostáva nedotknuté
+    # Filtrujeme prázdne riadky iba pre potreby akciového FIFO enginu, pôvodné df ostáva nedotknuté
     df_akcie_len = df.dropna(subset=['Time']).copy()
     df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != '']
     df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != 'NAN'].sort_values(by='Time').reset_index(drop=True)
