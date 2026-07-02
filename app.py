@@ -55,7 +55,7 @@ if uploaded_files:
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
                 databaza_mien[tick_c] = full_name
 
-    # 📅 TRI ROČNÉ ZÁLOŽKY - PEVNÁ ŠTRUKTÚRA BEZ RIZIKA CHÝB
+    # 📅 TRI ROČNÉ ZÁLOŽKY - PEVNÁ RUČNÁ ŠTRUKTÚRA BEZ RIZIKA CHÝB
     tab2024, tab2025, tab2026 = st.tabs(["📅 Daňový rok 2024", "📅 Daňový rok 2025", "📅 Daňový rok 2026"])
     dnes = datetime.now()
     
@@ -140,7 +140,7 @@ if uploaded_files:
                 st.markdown("---")
                 st.subheader("📋 Detailný rozpis nákupných balíčkov (2024)")
                 csv_str_24 = "\n".join([",".join(row) for row in csv_24])
-                st.download_button(label="📥 STIAHŤ ROZPIS FRAKCIÍ ZA ROK 2024 (CSV)", data=csv_str_24.encode('utf-8'), file_name=f"t212_frakcie_{ticker_pure_2024}_2024.csv", mime="text/csv", key="btn_24")
+                st.download_button(label="📥 STIAHNUŤ ROZPIS FRAKCIÍ ZA ROK 2024 (CSV)", data=csv_str_24.encode('utf-8'), file_name=f"t212_frakcie_{ticker_pure_2024}_2024.csv", mime="text/csv", key="btn_24")
                 for t in txt_24: st.write(t)
                 
             # Dividendy 2024
@@ -156,7 +156,7 @@ if uploaded_files:
                 exp_div_24.write(f"**Celkový príjem Brutto (Riadok 1):** `{tb:.2f} EUR` | **Zaplatená daň v zahraničí:** `{tt:.2f} EUR`")
             else: exp_div_24.info("V daňovom roku 2024 neboli nájdené žiadne dividendy pre túto akciu.")
             
-        # Úroky 2024 (Opravené medzery)
+        # Úroky 2024 (Striktne očistené zarovnanie)
         df_ur_24 = df_global[(df_global['Action'].str.lower().str.contains('interest on cash|úrok|urok', na=False)) & (df_global['Rok'] == 2024)].copy()
         exp_ur_24 = st.expander("💶 Zobraziť sumár Úrokov z neinvestovanej hotovosti za daňový rok 2024")
         if len(df_ur_24) > 0:
