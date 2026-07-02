@@ -5,6 +5,66 @@ import re
 
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
+# =========================================================================
+# 🧮 IZOLOVANÝ KOREKTNÝ FIFO ENGINE (Úplná eliminácia IndentationError)
+# =========================================================================
+def spracuj_fifo_transakcie(df_akcie_len, vybrany_rok, databaza_mien):
+    realizovane_obchody_rok = []
+    otvorene_loty_portfolio = {}
+    zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique() if t and t != 'UNKNOWN'])
+
+    for t in zoznam_tickerov_vsetky:
+        df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
+        nakupne_loty = []
+        
+        for idx, row in df_t.iterrows():
+            množstvo = abs(float(row['No. of shares']))
+            cena_ks = float(row['Price per share'])
+            akcia = str(row['Action_Clean'])
+            
+            is_sell = ('sell' in akcia or 'predaj' in akcia)
+            is_buy = ('buy' in akcia or 'nákup' in akcia or 'nakup' in akcia)
+            
+            if is_buy and not is_sell:
+                nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time'], 'pôvodné': množstvo})
+                continue
+                
+            if is_sell:
+                množstvo_na_predaj = množstvo
+                for i in range(len(nakupne_loty)):
+                    if nakupne_loty[i]['množstvo'] <= 0 or množstvo_na_predaj <= 0:
+                        continue
+                        
+                    odpredane = min(nakupne_loty[i]['množstvo'], množstvo_na_predaj)
+                    nakupne_loty[i]['množstvo'] -= odpredane
+                    množstvo_na_predaj -= odpredane
+                    
+                    # Poctivý FIFO Výpočet zisku: (Predajná_Cena - Nákupná_Cena_Z_Lotu) * Kusy
+                    čistý_zisk = (cena_ks - nakupne_loty[i]['cena_nakup']) * odpredane
+                    
+                    # Skutočný časový test: Dátum predaja - Dátum nákupu konkrétnej šarže
+                    dni_drzania = (row['Time'] - nakupne_loty[i]['datum_nakup']).days
+                    oslobodene = (dni_drzania >= 365)
+                    
+                    if vybrany_rok == "Všetky" or row['Rok'] == int(vybrany_rok):
+                        realizovane_obchody_rok.append({
+                            'Ticker': t, 
+                            'Spoločnosť': databaza_mien.get(t, "Neznáma"), 
+                            'Kusy': odpredane,
+                            'Dátum nákupu': nakupne_loty[i]['datum_nakup'].strftime('%Y-%m-%d'),
+                            'Dátum predaja': row['Time'].strftime('%Y-%m-%d'),
+                            'Dni držania': f"{dni_drzania} dní",
+                            'Zisk/Strata (EUR)': čistý_zisk, 
+                            'Oslobodené': "Áno (Časový test OK)" if oslobodene else "Nie (Podlieha dani)",
+                            'Zdaniteľný Zisk': 0.0 if oslobodene else (čistý_zisk if čistý_zisk > 0 else 0.0)
+                        })
+        otvorene_loty_portfolio[t] = nakupne_loty
+        
+    return realizovane_obchody_rok, otvorene_loty_portfolio
+
+# =========================================================================
+# 💾 TRVALÁ PAMÄŤ CLOUDU (OCHRANA PRED RESETOM SÚBOROV)
+# =========================================================================
 if "databaza_transakcii" not in st.session_state:
     st.session_state.databaza_transakcii = None
 
@@ -39,7 +99,6 @@ if uploaded_files:
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🔍 UNIVERZÁLNE MAPOVANIE VARIÁCIÍ STĹPCOV
     mapovanie_stlpcov = {}
     flags = {"time": False, "action": False, "ticker": False, "name": False, "shares": False, "price": False, "total": False, "wht": False}
     
@@ -137,64 +196,3 @@ if st.session_state.databaza_transakcii is not None:
     df_akcie_len = df_akcie_len[df_akcie_len['Ticker'].notna()]
     df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
     df_akcie_len = df_akcie_len[(df_akcie_len['Ticker_Clean'] != '') & (df_akcie_len['Ticker_Clean'] != 'NONE') & (df_akcie_len['Ticker_Clean'] != 'NAN') & (df_akcie_len['Ticker_Clean'] != 'UNKNOWN')]
-    df_akcie_len = df_akcie_len[~df_akcie_len['Action_Clean'].str.contains('dividend|dividenda|interest|úrok|urok|deposit|vklad|withdrawal', na=False)].sort_values(by='Time').reset_index(drop=True)
-    
-    databaza_mien = {}
-    for _, riadok in df_akcie_len.iterrows():
-        tick = str(riadok['Ticker_Clean'])
-        if tick and tick != 'UNKNOWN':
-            databaza_mien[tick] = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
-
-    realizovane_obchody_rok = []
-    otvorene_loty_portfolio = {}
-    zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique() if t and t != 'UNKNOWN'])
-
-    # 🌟 HISTORICKY PRESNÝ A POCTIVÝ FIFO ENGINE
-    for t in zoznam_tickerov_vsetky:
-        df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
-        nakupne_loty = []
-        
-        for idx, row in df_t.iterrows():
-            množstvo = abs(float(row['No. of shares']))
-            cena_ks = float(row['Price per share'])
-            akcia = str(row['Action_Clean'])
-            
-            is_sell = ('sell' in akcia or 'predaj' in akcia)
-            is_buy = ('buy' in akcia or 'nákup' in akcia or 'nakup' in akcia)
-            
-            if is_buy and not is_sell:
-                nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time'], 'pôvodné': množstvo})
-                continue
-                
-            if is_sell:
-                množstvo_na_predaj = množstvo
-                for i in range(len(nakupne_loty)):
-                    if nakupne_loty[i]['množstvo'] <= 0 or množstvo_na_predaj <= 0:
-                        continue
-                        
-                    odpredane = min(nakupne_loty[i]['množstvo'], množstvo_na_predaj)
-                    nakupne_loty[i]['množstvo'] -= odpredane
-                    množstvo_na_predaj -= odpredane
-                    
-                    # Čistý zisk z tohto konkrétneho uzavretého lotu
-                    čistý_zisk = (cena_ks - nakupne_loty[i]['cena_nakup']) * odpredane
-                    
-                    # Vek šarže určený ako: Dátum predaja - Dátum nákupu z lotu
-                    dni_drzania = (row['Time'] - nakupne_loty[i]['datum_nakup']).days
-                    oslobodene = (dni_drzania >= 365)
-                    
-                    if st.session_state.vybrany_rok == "Všetky" or row['Rok'] == int(st.session_state.vybrany_rok):
-                        realizovane_obchody_rok.append({
-                            'Ticker': t, 
-                            'Spoločnosť': databaza_mien.get(t, "Neznáma"), 
-                            'Kusy': odpredane,
-                            'Dátum nákupu': nakupne_loty[i]['datum_nakup'].strftime('%Y-%m-%d'),
-                            'Dátum predaja': row['Time'].strftime('%Y-%m-%d'),
-                            'Dni držania': f"{dni_drzania} dní",
-                            'Zisk/Strata (EUR)': čistý_zisk, 
-                            'Oslobodené': "Áno (Časový test OK)" if oslobodene else "Nie (Podlieha dani)",
-                            'Zdaniteľný Zisk': 0.0 if oslobodene else (čistý_zisk if čistý_zisk > 0 else 0.0)
-                        })
-        otvorene_loty_portfolio[t] = nakupne_loty
-
-    if len(realizovane_obchody_rok) == 0:
