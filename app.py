@@ -44,7 +44,7 @@ if uploaded_files:
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🔍 Ochrana pred duplicitnými stĺpcami (Total vs Total (EUR)) pomocou booleovských prepínačov
+    # 🔍 UNIVERZÁLNE PREMENOVANIE STĹPCOV - Ochrana pred duplicitnými stĺpcami (napr. Total vs Total (EUR))
     mapovanie_stlpcov = {}
     najdeny_shares = False
     najdeny_total = False
@@ -70,8 +70,7 @@ if st.session_state.databaza_transakcii is not None:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df['Rok'] = df['Time'].dt.year
     
-    # Bezpečné čistenie textových polí a Action stĺpca
-    df['Action_Clean'] = df['Action'].fillna('').astype(str).str.strip()
+    df['Action_Clean'] = df['Action'].fillna('').astype(str).str.strip().str.lower()
     
     # =========================================================================
     # 📅 MODUL SELEKCIE DAŇOVÉHO OBDOBIA (Tlačidlá)
@@ -98,8 +97,8 @@ if st.session_state.databaza_transakcii is not None:
     # =========================================================================
     # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY (S EXPANDERMI)
     # =========================================================================
-    df_dividendy = df_filtrovane[df_filtrovane['Action_Clean'].str.lower().str.contains('dividend', na=False)].copy()
-    df_uroky = df_filtrovane[df_filtrovane['Action_Clean'].str.lower().str.contains('interest', na=False)].copy()
+    df_dividendy = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('dividend', na=False)].copy()
+    df_uroky = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('interest', na=False)].copy()
     
     col_div, col_int = st.columns(2)
     
@@ -145,13 +144,13 @@ if st.session_state.databaza_transakcii is not None:
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
-    # 🌟 CRITICAL FIX: Filtrujeme a čistíme NaN hodnoty v Ticker stĺpci presne podľa tvojej retrospektívy!
+    # Čistenie riadkov a filtrovanie cez dropna len pre potreby FIFO
     df_akcie_len = df.dropna(subset=['Time', 'Ticker']).copy()
     df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
     df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != '']
     df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != 'NAN'].sort_values(by='Time').reset_index(drop=True)
     
-    # Pre-processing pre vytvorenie unifikovanej databázy názvov spoločností (iba z vyčistených akcií)
+    # Generovanie databázy mien
     databaza_mien = {}
     for _, riadok in df_akcie_len.iterrows():
         tick_c = riadok['Ticker_Clean']
@@ -170,17 +169,20 @@ if st.session_state.databaza_transakcii is not None:
         nakupne_loty = []
         
         for idx, row in df_t.iterrows():
-            akcia = str(row['Action_Clean']).lower()
+            akcia = str(row['Action_Clean'])
             množstvo = float(row['No. of shares'])
             total_val = float(row['Total'])
             cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
             
-            if 'buy' in akcia:
+            # 🌟 UNIVERZÁLNY FIX: Akceptuje nákup v angličtine aj slovenčine (buy, market buy, nákup...)
+            if 'buy' in akcia or 'nákup' in akcia or 'nakup' in akcia:
                 lot = {'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']}
                 nakupne_loty.append(lot)
                 
-            elif 'sell' in akcia:
+            # 🌟 UNIVERZÁLNY FIX: Akceptuje predaj v angličtine aj slovenčine (sell, market sell, predaj...)
+            elif 'sell' in akcia or 'predaj' in akcia:
                 množstvo_na_predaj = množstvo
+                
                 while množstvo_na_predaj > 0 and len(nakupne_loty) > 0:
                     aktualny_lot = nakupne_loty[0]
                     
@@ -189,5 +191,3 @@ if st.session_state.databaza_transakcii is not None:
                         množstvo_na_predaj -= odpredane_množstvo
                         nakupne_loty.pop(0)
                     else:
-                        odpredane_množstvo = množstvo_na_predaj
-                        aktualny_lot['množstvo'] -= odpredane_množstvo
