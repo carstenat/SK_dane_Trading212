@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+import numpy as np
+from datetime import datetime, timezone
 
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
@@ -31,30 +32,34 @@ else:
     st.markdown("<style>.stApp { background-color: #FFFFFF !important; color: #1E293B !important; } h1, h2 { color: #0F172A !important; } div[data-testid='stMetric'] { background-color: #F8FAFC !important; border: 2px solid #CBD5E1 !important; border-radius: 12px !important; padding: 14px 18px !important; }</style>", unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
+st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií podľa legislatívy SR (2024+).")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True, key="uploader_main_final")
 
 if uploaded_files:
     zoznam_df = []
     for file in uploaded_files:
-        zoznam_df.append(pd.read_csv(file))
-    st.session_state.databaza_transakcii = pd.concat(zoznam_df, ignore_index=True)
+        try:
+            zoznam_df.append(pd.read_csv(file))
+        except Exception as e:
+            st.error(f"Chyba pri načítaní súboru {file.name}: {e}")
+    if zoznam_df:
+        st.session_state.databaza_transakcii = pd.concat(zoznam_df, ignore_index=True)
 
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🔍 UNIVERZÁLNE PREMENOVANIE STĹPCOV - Použitie booleovských vlajok podľa retrospektívy
+    # 🔍 UNIVERZÁLNE PREMENOVANIE STŮPCOV
     mapovanie_stlpcov = {}
     najdeny_shares = False
     najdeny_total = False
     najdeny_wht = False
     
     for c in df.columns:
-        if ('shares' in c.lower() or 'kus' in c.lower()) and not najdeny_shares:
+        if ('shares' in c.lower() or 'kus' in c.lower() or 'počet' in c.lower()) and not najdeny_shares:
             mapovanie_stlpcov[c] = 'No. of shares'
             najdeny_shares = True
-        elif ('total' in c.lower() or 'celkom' in c.lower()) and not najdeny_total:
+        elif ('total' in c.lower() or 'celkom' in c.lower() or 'suma' in c.lower()) and not najdeny_total:
             mapovanie_stlpcov[c] = 'Total'
             najdeny_total = True
         elif ('withholding' in c.lower() or 'zrazen' in c.lower()) and not najdeny_wht:
@@ -70,6 +75,23 @@ if st.session_state.databaza_transakcii is not None:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df['Rok'] = df['Time'].dt.year
     df['Action_Clean'] = df['Action'].fillna('').astype(str).str.strip().str.lower()
+    df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
+    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
+
+    # Prečistenie dát pre akcie
+    df_akcie_len = df.dropna(subset=['Time', 'Ticker']).copy()
+    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
+    df_akcie_len = df_akcie_len[(df_akcie_len['Ticker_Clean'] != '') & (df_akcie_len['Ticker_Clean'] != 'NAN')]
+    df_akcie_len = df_akcie_len.sort_values(by='Time').reset_index(drop=True)
+    
+    # Príprava čistej databázy mien (vždy String)
+    databaza_mien = {}
+    for _, riadok in df_akcie_len.iterrows():
+        tick_c = riadok['Ticker_Clean']
+        name_val = riadok.get('Name', tick_c)
+        if pd.isna(name_val) or str(name_val).strip() == '':
+            name_val = tick_c
+        databaza_mien[tick_c] = str(name_val).strip()
 
     # =========================================================================
     # 📅 MODUL SELEKCIE DAŇOVÉHO OBDOBIA (UI Tlačidlá)
@@ -94,7 +116,7 @@ if st.session_state.databaza_transakcii is not None:
         df_filtrovane = df[df['Rok'] == int(st.session_state.vybrany_rok)].copy()
 
     # =========================================================================
-    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY (S EXPANDERMI)
+    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY
     # =========================================================================
     df_dividendy = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('dividend', na=False)].copy()
     df_uroky = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('interest', na=False)].copy()
@@ -133,63 +155,43 @@ if st.session_state.databaza_transakcii is not None:
         else:
             st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
 
-    # Safe-typing pre matematické operácie na akcie
-    df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
-    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
-
     # =========================================================================
-    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (PREČISTENÝ PLOCHÝ FIFO ENGINE)
+    # ⚙️ JADRO CORE: PLOCHÝ FIFO ENGINE PRE CELÚ HISTÓRIU
     # =========================================================================
-    st.markdown("---")
-    st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
+    priebezne_sarze = {}  # Ticker -> list of dicts (nákupy)
+    realizovane_predaje_vsetky = [] # Všetky zatvorené obchody v histórii
     
-    # Čistenie NaN hodnôt v Ticker a Time podľa požiadavky retrospektívy
-    df_akcie_len = df.dropna(subset=['Time', 'Ticker']).copy()
-    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
-    df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != '']
-    df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != 'NAN'].sort_values(by='Time').reset_index(drop=True)
-    
-    # Generovanie databázy mien spoločností
-    databaza_mien = {}
     for _, riadok in df_akcie_len.iterrows():
-        tick_c = riadok['Ticker_Clean']
-        full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
-        if full_name and full_name != 'nan':
-            databaza_mien[tick_c] = full_name
-
-    zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique()])
-    
-    realizovane_obchody_rok = []
-    otvorene_loty_portfolio = {}
-
-    # FLATTENED ENGINE: Žiadne hlboké if/else štruktúry pre parser
-    for t in zoznam_tickerov_vsetky:
-        df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
-        nakupne_loty = []
+        ticker = riadok['Ticker_Clean']
+        akcia = riadok['Action_Clean']
+        cas = riadok['Time']
+        kusy = float(riadok['No. of shares'])
+        celkom = float(riadok['Total'])
         
-        for idx, row in df_t.iterrows():
-            akcia = str(row['Action_Clean'])
-            množstvo = float(row['No. of shares'])
-            total_val = float(row['Total'])
-            cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
+        if ticker not in priebezne_sarze:
+            priebezne_sarze[ticker] = []
             
-            is_buy = ('buy' in akcia or 'nákup' in akcia or 'nakup' in akcia)
-            is_sell = ('sell' in akcia or 'predaj' in akcia)
-            
-            if is_buy:
-                nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']})
+        if 'buy' in akcia or 'market buy' in akcia or 'limit buy' in akcia:
+            if kusy > 0:
+                cena_za_kus = celkom / kusy
+                priebezne_sarze[ticker].append({
+                    'Time': cas,
+                    'Kusy_Povodny': kusy,
+                    'Kusy_Ostava': kusy,
+                    'Total_Povodny': celkom,
+                    'Cena_Za_Kus': cena_za_kus
+                })
                 
-            if is_sell:
-                množstvo_na_predaj = množstvo
-                while množstvo_na_predaj > 0 and len(nakupne_loty) > 0:
-                    aktualny_lot = nakupne_loty[0]
+        elif 'sell' in akcia or 'market sell' in akcia or 'limit sell' in akcia:
+            if kusy > 0:
+                ostava_na_predaj = kusy
+                predajna_cena_za_kus = celkom / kusy
+                pouzite_sarze_v_predaji = []
+                
+                while ostava_na_predaj > 0 and len(priebezne_sarze[ticker]) > 0:
+                    najstarsi_nakup = priebezne_sarze[ticker][0]
                     
-                    if aktualny_lot['množstvo'] <= množstvo_na_predaj:
-                        odpredane_množstvo = aktualny_lot['množstvo']
-                        množstvo_na_predaj -= odpredane_množstvo
-                        nakupne_loty.pop(0)
-                    else:
-                        odpredane_množstvo = množstvo_na_predaj
-                        aktualny_lot['množstvo'] -= odpredane_množstvo
-                        množstvo_na_predaj = 0
-                        
+                    if najstarsi_nakup['Kusy_Ostava'] <= ostava_na_predaj:
+                        vzaté_kusy = najstarsi_nakup['Kusy_Ostava']
+                        ostava_na_predaj -= vzaté_kusy
+                        pouzite_sarze_v_predaji.append({
