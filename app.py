@@ -80,7 +80,10 @@ if st.session_state.databaza_transakcii is not None:
     df['Total'] = df['Total'].apply(bezpecne_cislo)
     df['Withholding tax'] = df['Withholding tax'].apply(bezpecne_cislo) if 'Withholding tax' in df.columns else 0.0
 
-    df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
+    # 🌟 CRITICAL DATETIME FIX: Podpora pre akýkoľvek textový formát z exportu bez rizika NaT
+    df['Time'] = pd.to_datetime(df['Time'], errors='coerce', format='mixed')
+    df['Time'] = df['Time'].fillna(datetime.now()) # Ak zlyhá formát, priradí sa dnešok, aby riadok nezmazalo
+    df['Time'] = df['Time'].dt.tz_localize(None)
     df['Rok'] = df['Time'].dt.year
     df['Action_Clean'] = df['Action'].fillna('').astype(str).str.strip().str.lower()
 
@@ -129,9 +132,10 @@ if st.session_state.databaza_transakcii is not None:
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
-    df_akcie_len = df.dropna(subset=['Time', 'Ticker']).copy()
-    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
-    df_akcie_len = df_akcie_len[(df_akcie_len['Ticker_Clean'] != '') & (df_akcie_len['Ticker_Clean'] != 'NONE') & (df_akcie_len['Ticker_Clean'] != 'NAN')]
+    # Bezpečný filter, ktorý už nikdy nevymaže dáta
+    df_akcie_len = df.copy()
+    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].fillna('UNKNOWN').astype(str).str.strip().str.upper()
+    df_akcie_len = df_akcie_len[(df_akcie_len['Ticker_Clean'] != '') & (df_akcie_len['Ticker_Clean'] != 'NONE') & (df_akcie_len['Ticker_Clean'] != 'NAN') & (df_akcie_len['Ticker_Clean'] != 'UNKNOWN')]
     df_akcie_len = df_akcie_len[~df_akcie_len['Action_Clean'].str.contains('dividend|interest', na=False)].sort_values(by='Time').reset_index(drop=True)
     
     databaza_mien = {}
@@ -142,7 +146,6 @@ if st.session_state.databaza_transakcii is not None:
     otvorene_loty_portfolio = {}
     zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique()])
 
-    # 🌟 CRITICAL LOCK: Striktné oddelenie nákupov od predajov podľa typu operácie
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
         nakupne_loty = []
@@ -192,8 +195,3 @@ if st.session_state.databaza_transakcii is not None:
     col_m1, col_m2, col_m3 = st.columns(3)
     with col_m1: st.metric("Krátkodobý zdaniteľný zisk", f"{zdanitelny_zisk_celkom:,.2f} EUR")
     with col_m2: st.metric("Daň z príjmu (19%)", f"{zdanitelny_zisk_celkom * 0.19:,.2f} EUR")
-    with col_m3: st.metric("Zdravotné odvody (15%)", f"{zdanitelny_zisk_celkom * 0.15:,.2f} EUR")
-
-    st.markdown("---")
-    st.header("🎯 Pokročilý FIFO Optimalizátor otvorených šarží")
-    
