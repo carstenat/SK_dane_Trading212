@@ -115,7 +115,7 @@ if st.session_state.databaza_transakcii is not None:
             st.metric("Zahraničná zrazená daň (WHT)", f"{total_div_wht:.2f} EUR")
             st.write(f"**Čisté vyplatené dividendy (Netto):** {total_div_net:.2f} EUR")
             
-            with st.expander("Zobraziť históriu dividend pro toto obdobie"):
+            with st.expander("Zobraziť históriu dividend pre toto obdobie"):
                 st.dataframe(df_dividendy[['Time', 'Ticker', 'Action', 'Total']].head(100))
         else:
             st.info("Pre zvolené obdobie sa nenašli žiadne dividendy.")
@@ -150,7 +150,6 @@ if st.session_state.databaza_transakcii is not None:
     zoznam_tickerov = sorted([t for t in df['Ticker_Clean'].unique() if t != ''])
     
     if zoznam_tickerov:
-        # Vytvorenie pekných popisov pre dropdown (Ticker - Názov spoločnosti)
         mapovanie_zobrazenia = {}
         list_na_zobrazenie = []
         
@@ -166,7 +165,6 @@ if st.session_state.databaza_transakcii is not None:
         df_ticker = df[df['Ticker_Clean'] == skutocny_ticker].copy()
         st.subheader(f"FIFO analýza lotov pre: {vybrany_text}")
         
-        # Filtrujeme kompletnú históriu BUY a SELL pre daný ticker kvôli správnemu priradeniu FIFO
         vsetky_transakcie = df_ticker[df_ticker['Action'].str.lower().str.contains('buy|sell', na=False)].copy()
         
         nakupne_loty = []
@@ -197,3 +195,7 @@ if st.session_state.databaza_transakcii is not None:
                         break
                         
                     if lot["Kusy_Zostatok"] > 0.00001:
+                        odcerpane_kusy = min(zostava_na_predaj, lot["Kusy_Zostatok"])
+                        
+                        nakupna_cena_sarze = odcerpane_kusy * lot["Cena_Za_Kus"]
+
