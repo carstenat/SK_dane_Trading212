@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant (SR)", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 🎨 VZHĽAD – DARK / LIGHT MODE
+# 🎨 VZHĽAD – DARK / LIGHT MODE + MOBILNÉ ROZLOŽENIE
 # =========================================================================
 st.sidebar.header("⚙️ Nastavenia vzhľadu")
 dark_mode = st.sidebar.checkbox("🌙 Tmavý režim (Dark Mode)", value=False)
@@ -22,14 +22,20 @@ if dark_mode:
             padding: 16px 20px !important; box-shadow: 0 4px 14px rgba(0,0,0,0.35);
         }
         div[data-testid="stMetricValue"] { color: #38BDF8 !important; }
-        .stTabs [data-baseweb="tab"] { color: #94A3B8 !important; }
-        .stTabs [aria-selected="true"] { color: #38BDF8 !important; border-bottom-color: #38BDF8 !important; }
         div[data-testid="stDataFrame"] { border: 1px solid #2D3B52 !important; border-radius: 10px; }
         .stDownloadButton button, .stButton button {
             background: linear-gradient(135deg, #2563EB, #1D4ED8) !important; color: white !important;
             border: none !important; border-radius: 10px !important; font-weight: 600 !important;
         }
         div[data-testid="stExpander"] { border: 1px solid #2D3B52 !important; border-radius: 10px !important; background-color: #131A28 !important; }
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            background-color: #131A28 !important; border: 1px solid #2D3B52 !important; border-radius: 14px !important;
+        }
+        div[role="radiogroup"] label {
+            background-color: #1A2233 !important; border: 1px solid #2D3B52 !important;
+            border-radius: 999px !important; padding: 8px 16px !important; margin: 4px !important;
+        }
+        code, .stCode { background-color: #0B0F19 !important; }
         </style>
     """, unsafe_allow_html=True)
 else:
@@ -49,15 +55,37 @@ else:
             border: none !important; border-radius: 10px !important; font-weight: 600 !important;
         }
         div[data-testid="stExpander"] { border: 1px solid #E2E8F0 !important; border-radius: 10px !important; }
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            background-color: #F8FAFC !important; border: 1px solid #E2E8F0 !important; border-radius: 14px !important;
+        }
+        div[role="radiogroup"] label {
+            background-color: #F1F5F9 !important; border: 1px solid #CBD5E1 !important;
+            border-radius: 999px !important; padding: 8px 16px !important; margin: 4px !important;
+        }
         </style>
     """, unsafe_allow_html=True)
+
+# Spoločné CSS pre oba režimy: aby sa stĺpce na tablete/telefóne pekne
+# preusporiadali pod seba namiesto toho, aby sa stláčali do úzkych pásikov.
+st.markdown("""
+    <style>
+    div[data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; gap: 10px !important; }
+    div[data-testid="column"] { min-width: 220px !important; flex: 1 1 220px !important; }
+    div[role="radiogroup"] { flex-wrap: wrap !important; }
+    div[role="radiogroup"] > label > div:first-child { display: none !important; }
+    @media (max-width: 640px) {
+        div[data-testid="stMetricValue"] { font-size: 1.4rem !important; }
+        h1 { font-size: 1.5rem !important; }
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Daňový Optimalizátor – Trading 212 (SR)")
 st.caption("Nástroj na kontrolu časového testu, dividend a úrokov pred podaním daňového priznania. "
            "Nie je to daňové poradenstvo – presné sadzby a výnimky si vždy over s daňovým poradcom/účtovníkom.")
 
 # =========================================================================
-# 🔧 POMOCNÉ FUNKCIE
+# 🔧 POMOCNÉ FUNKCIE (dátová logika – netýka sa vzhľadu)
 # =========================================================================
 
 def sk_num(x, decimals=2):
@@ -214,15 +242,53 @@ def extract_interest(df):
 
 
 # =========================================================================
-# 📥 NAHRATIE SÚBOROV
+# 🎴 POMOCNÉ FUNKCIE PRE ZOBRAZENIE (iba vzhľad, netýka sa výpočtov)
 # =========================================================================
+
+def render_lot_card(nakup_pure, vziat_ks, cena_za_kus, cena_balika, vek_dni):
+    """Zobrazí jeden nákupný balíček (frakciu) ako prehľadnú kartu s odpočtom dní."""
+    exempt = vek_dni >= 365
+    with st.container(border=True):
+        c1, c2, c3 = st.columns([1.2, 1.2, 1.6])
+        with c1:
+            st.markdown(f"📅 **Dátum nákupu**")
+            st.markdown(f"{nakup_pure.strftime('%d.%m.%Y')}")
+        with c2:
+            st.markdown(f"📦 **Množstvo / cena**")
+            st.markdown(f"{vziat_ks:.5f} ks · {cena_za_kus:.2f} €/ks")
+            st.caption(f"Spolu nákup: {cena_balika:.2f} €")
+        with c3:
+            if exempt:
+                st.markdown("🟢 **Oslobodené od dane**")
+                st.caption("Časový test 365 dní je splnený – tento balíček môžeš predať bez dane z príjmu "
+                            "(zdravotné odvody môžu mať iné pravidlá, over si to).")
+            else:
+                zostava = 365 - vek_dni
+                datum_oslobodenia = (nakup_pure + timedelta(days=365)).strftime("%d.%m.%Y")
+                st.markdown("🔴 **Zdaňuje sa, ak predáš teraz**")
+                st.caption(f"Ešte {zostava} dní do oslobodenia (t.j. do {datum_oslobodenia}).")
+                st.progress(min(1.0, max(0.0, vek_dni / 365)))
+
+
+def metric_help(text_zaklad, text_navod):
+    """Pomocný text pre metriku: čo číslo znamená + čo má klient robiť."""
+    return f"{text_zaklad}\n\n➡️ **Čo mám robiť:** {text_navod}"
+
+
+# =========================================================================
+# KROK 1 – NAHRATIE SÚBOROV
+# =========================================================================
+st.markdown("## 1️⃣ Nahraj svoje dáta")
 uploaded_files = st.file_uploader(
-    "Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)",
-    type=["csv"], accept_multiple_files=True, key="uploader_main_final"
+    "Presuň sem CSV exporty z Trading 212 (môžeš aj viac naraz)",
+    type=["csv"], accept_multiple_files=True, key="uploader_main_final",
+    help="V aplikácii Trading 212: Účet → History → Export → zvoľ obdobie → stiahni CSV. "
+         "Ak máš históriu rozdelenú do viacerých súborov/rokov, pokojne nahraj všetky naraz – "
+         "aplikácia ich spojí do jedného prehľadu."
 )
 
 if not uploaded_files:
-    st.info("⬆️ Nahraj jeden alebo viac CSV exportov z Trading 212 (History → Export).")
+    st.info("⬆️ Najprv nahraj aspoň jeden CSV export z Trading 212, aby si mohol pokračovať na ďalšie kroky.")
     st.stop()
 
 try:
@@ -236,18 +302,35 @@ all_lots, realized_df = build_full_fifo(df)
 dividends_df = extract_dividends(df)
 interest_df = extract_interest(df)
 
-tab1, tab2, tab3, tab4 = st.tabs([
-    "🎯 Optimalizátor predaja",
-    "📅 Daňové priznanie za rok",
-    "💰 Dividendy",
-    "💶 Úroky"
-])
+st.success(f"✅ Načítaných {len(df)} riadkov z {len(uploaded_files)} súboru(-ov). Pokračuj krokom 2 nižšie.")
+st.markdown("---")
 
 # =========================================================================
-# TAB 1 – OPTIMALIZÁTOR PRE BUDÚCI PREDAJ (aktuálny stav skladu)
+# NAVIGÁCIA MEDZI KROKMI 2–5
 # =========================================================================
-with tab1:
-    st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
+st.markdown("## Kam chceš pokračovať?")
+KROKY = [
+    "🎯 2. Čo môžem predať dnes",
+    "📅 3. Daňové priznanie za rok",
+    "💰 4. Dividendy",
+    "💶 5. Úroky",
+]
+aktivny_krok = st.radio("Postup", KROKY, horizontal=True, label_visibility="collapsed", key="active_step")
+st.info(f"📍 Momentálne si v kroku: **{aktivny_krok}**")
+st.markdown("---")
+
+# =========================================================================
+# KROK 2 – OPTIMALIZÁTOR PRE BUDÚCI PREDAJ (aktuálny stav skladu)
+# =========================================================================
+if aktivny_krok == KROKY[0]:
+    st.header("🎯 Krok 2: Čo môžem predať dnes bez dane?")
+    with st.expander("❓ Ako to funguje a čo mám robiť?"):
+        st.write(
+            "Aplikácia zoradí tvoje nákupy danej akcie chronologicky (najstaršie najprv – metóda FIFO) a "
+            "porovná ich vek s 365-dňovým časovým testom. Balíčky staršie ako 365 dní sú **oslobodené od dane**, "
+            "mladšie sa **zdaňujú**. Zadaj, koľko kusov chceš predať, a aplikácia ti povie presne, ktoré "
+            "balíčky (podľa poradia FIFO) by boli použité a s akým daňovým dopadom."
+        )
 
     zoznam_tickerov_all = sorted([t for t in all_lots.keys() if t])
     if not zoznam_tickerov_all:
@@ -262,26 +345,30 @@ with tab1:
             mapovanie_tickerov[text_riadku] = t
         ponuka_pre_menu = sorted(set(ponuka_pre_menu))
 
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:",
-                                     ponuka_pre_menu, key="sel_linearna_final")
+        vybrany_text = st.selectbox("Vyber akciu zo svojho portfólia, ktorú plánuješ predať:",
+                                     ponuka_pre_menu, key="sel_linearna_final",
+                                     help="Zoznam obsahuje všetky tickery nájdené v tvojich CSV súboroch.")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
 
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:",
-                                               min_value=0.0, value=0.0, step=0.00001, format="%.5f",
-                                               key="vstup_stav_final")
+            vstup_vlastnene = st.number_input(
+                "Počet kusov, ktoré chceš predať:",
+                min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_final",
+                help="Zadaj presne toľko kusov, koľko plánuješ predať. Aplikácia ich rozdelí podľa poradia "
+                     "nákupu (FIFO) a ukáže ti, ktoré balíčky by boli oslobodené a ktoré zdanené.")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):",
-                                             min_value=0.0, value=0.0, step=0.01, format="%.2f",
-                                             key="vstup_cena_final")
+            aktualna_cena = st.number_input(
+                "Aktuálna trhová cena akcie v EUR:",
+                min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_final",
+                help="Voliteľné. Ak ju zadáš, aplikácia dopočíta aj peňažnú hodnotu zisku a odhad dane v eurách.")
 
         sklad_aktualny = [dict(l) for l in all_lots.get(vybrany_ticker_pure, [])]
         max_sklad_dostupny = sum(x["shares"] for x in sklad_aktualny)
 
         skutocny_stav = vstup_vlastnene
         if vstup_vlastnene > max_sklad_dostupny + 1e-6:
-            st.error(f"⚠️ Pozor: Zadali ste {vstup_vlastnene:.5f} ks, ale podľa histórie v CSV zostáva len "
+            st.error(f"⚠️ Pozor: Zadal si {vstup_vlastnene:.5f} ks, ale podľa histórie v CSV zostáva len "
                      f"{max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame na reálne maximum "
                      f"z dát (môže to byť spôsobené chýbajúcim starším CSV exportom).")
             skutocny_stav = max_sklad_dostupny
@@ -292,7 +379,7 @@ with tab1:
         ks_mlade = 0.0
         vydavok_safe_balika = 0.0
         vydavok_mladeho_balika = 0.0
-        rozpis_textov = []
+        karty_na_vykreslenie = []
         export_csv_riadky = [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup",
                                "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
 
@@ -307,16 +394,12 @@ with tab1:
             cena_balika = vziat_ks * n["cena_za_kus"]
 
             d_nakupu = nakup_pure.strftime("%d.%m.%Y")
-            text_mnozstva = f"{vziat_ks:.5f} ks"
-            text_ceny = f"{n['cena_za_kus']:.2f} EUR/ks"
-            text_celkovo = f"Spolu: {cena_balika:.2f} EUR"
+
+            karty_na_vykreslenie.append((nakup_pure, vziat_ks, n["cena_za_kus"], cena_balika, vek_dni))
 
             if vek_dni >= 365:
                 ks_bez_dane += vziat_ks
                 vydavok_safe_balika += cena_balika
-                rozpis_textov.append(
-                    f"🟢 **BEZ DANE** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} "
-                    f"({text_celkovo}) | ⏳ Netreba čakať (Oslobodené)")
                 export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}",
                                            f"{cena_balika:.2f}", "Bez dane", "Uz oslobodene", "0 dni"])
             else:
@@ -324,9 +407,6 @@ with tab1:
                 vydavok_mladeho_balika += cena_balika
                 d_oslobodenia = (nakup_pure + timedelta(days=365)).strftime("%d.%m.%Y")
                 zostava_dni = 365 - vek_dni
-                rozpis_textov.append(
-                    f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} "
-                    f"({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})")
                 export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}",
                                            f"{cena_balika:.2f}", "Zdanuje sa", d_oslobodenia, f"{zostava_dni} dni"])
 
@@ -334,15 +414,18 @@ with tab1:
         ks_mlade = round(ks_mlade, 5)
 
         if skutocny_stav > 0:
-            st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
+            pokryte_ks = round(ks_bez_dane + ks_mlade, 5)
+            zhoda = "✅" if abs(pokryte_ks - round(skutocny_stav, 5)) < 1e-4 else "⚠️"
+            st.caption(f"{zhoda} Kontrola súčtu: rozpis nižšie pokrýva {pokryte_ks:.5f} ks "
+                       f"z {skutocny_stav:.5f} ks, ktoré si zadal.")
+
             vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
             st.progress(max(0.0, min(1.0, vypocitany_pomer)))
+            st.caption(f"Bez dane: {ks_bez_dane:.5f} ks · Zdaňuje sa: {ks_mlade:.5f} ks "
+                       f"(spolu {skutocny_stav:.5f} ks)")
 
             trhova_hodnota_safe = ks_bez_dane * aktualna_cena
             cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
-            st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | "
-                       f"Súčasná hodnota: {trhova_hodnota_safe:.2f} € "
-                       f"(Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
 
             trhova_hodnota_mlade = ks_mlade * aktualna_cena
             zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
@@ -350,33 +433,74 @@ with tab1:
             odvody_14 = round(zisk_mlade * 0.14, 2)
             celkovy_vypal_statu = dan_19 + odvody_14
 
-            st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
-            st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: `{zisk_mlade:.2f} EUR` | "
-                     f"Daň z príjmu (19%): `{dan_19:.2f} EUR` | Zdravotné odvody (14%)*: `{odvody_14:.2f} EUR` | "
-                     f"**Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR**")
+            m1, m2, m3 = st.columns(3)
+            m1.metric("🔓 Bez dane – hodnota", f"{sk_num(trhova_hodnota_safe)} €",
+                      help=metric_help(
+                          "Trhová hodnota kusov, ktoré máš oslobodené od dane (držané aspoň 365 dní).",
+                          "Tieto kusy môžeš predať kedykoľvek bez dane z príjmu."))
+            m2.metric("🔒 Zdaniteľný zisk", f"{sk_num(zisk_mlade)} €",
+                      help=metric_help(
+                          "Zisk z kusov mladších ako 365 dní – tento zisk podlieha dani.",
+                          "Ak nechceš platiť daň, počkaj s predajom týchto kusov, kým nesplnia časový test."))
+            m3.metric("💸 Odvedieš štátu", f"{sk_num(celkovy_vypal_statu)} €",
+                      help=metric_help(
+                          "Súčet dane z príjmu (19 %) a orientačných zdravotných odvodov (14 %) zo zdaniteľného zisku.",
+                          "Priprav si túto sumu na zaplatenie po podaní daňového priznania (over presnú sumu s účtovníkom)."))
+
             st.caption("*Zdravotné odvody z kapitálových príjmov majú výnimky a menia sa – over si aktuálny stav "
                        "s účtovníkom/zdravotnou poisťovňou.")
 
+            with st.expander("🧮 Chceš si výpočet overiť sám na kalkulačke? Klikni sem"):
+                st.code(
+f"""BEZ DANE (oslobodené balíčky):
+  Počet kusov            = {ks_bez_dane:.5f} ks
+  Trhová hodnota          = {ks_bez_dane:.5f} × {aktualna_cena:.2f} € = {trhova_hodnota_safe:.2f} €
+  Pôvodná nákupná cena     = {vydavok_safe_balika:.2f} €
+  Čistý zisk (bez dane)    = {trhova_hodnota_safe:.2f} € − {vydavok_safe_balika:.2f} € = {cisty_zisk_safe:.2f} €
+
+ZDAŇUJE SA (mladé balíčky):
+  Počet kusov            = {ks_mlade:.5f} ks
+  Trhová hodnota          = {ks_mlade:.5f} × {aktualna_cena:.2f} € = {trhova_hodnota_mlade:.2f} €
+  Pôvodná nákupná cena     = {vydavok_mladeho_balika:.2f} €
+  Zisk pred zdanením       = {trhova_hodnota_mlade:.2f} € − {vydavok_mladeho_balika:.2f} € = {zisk_mlade:.2f} €
+  Daň z príjmu (19 %)      = {zisk_mlade:.2f} € × 0,19 = {dan_19:.2f} €
+  Zdravotné odvody (14 %)  = {zisk_mlade:.2f} € × 0,14 = {odvody_14:.2f} €
+  SPOLU štátu              = {dan_19:.2f} € + {odvody_14:.2f} € = {celkovy_vypal_statu:.2f} €
+""")
+                st.caption("Skopíruj si tieto čísla do kalkulačky – ak ti vyjde to isté, výpočet aplikácie je správny.")
+
             st.markdown("---")
-            st.subheader("📋 Detailný rozpis nákupných balíčkov (Frakcií)")
+            st.subheader("📋 Detailný rozpis nákupných balíčkov (frakcií)")
+            with st.expander("❓ Čo je to balíček (frakcia) a prečo ich je viac?"):
+                st.write(
+                    "Každý nákup akcie v inom termíne vytvára samostatný 'balíček' (frakciu) so svojím vlastným "
+                    "dátumom a teda aj vlastným 365-dňovým časovým testom. Pri predaji sa najprv použijú "
+                    "najstaršie balíčky (metóda FIFO), preto ich tu vidíš rozdelené osobitne."
+                )
+
             csv_string = rows_to_csv_sk(export_csv_riadky)
             st.download_button(
-                label="📥 STIAHNUŤ TENTO ROZPIS FRAKCIÍ DO EXCELU (CSV)",
+                label="📥 Stiahnuť tento rozpis frakcií (CSV pre Excel)",
                 data=csv_string.encode("utf-8-sig"),
                 file_name=f"t212_rozpis_frakcii_{vybrany_ticker_pure}.csv",
                 mime="text/csv", key="btn_export_frakcii_v980")
 
-            with st.expander("Zobraziť chronologický zoznam balíčkov"):
-                for r_text in rozpis_textov:
-                    st.write(r_text)
+            for karta in karty_na_vykreslenie:
+                render_lot_card(*karta)
         else:
-            st.info("Zadaj počet vlastnených kusov vyššie pre výpočet.")
+            st.info("👆 Zadaj počet kusov, ktoré chceš predať, aby sa zobrazil výpočet.")
 
 # =========================================================================
-# TAB 2 – DAŇOVÉ PRIZNANIE ZA KONKRÉTNY ROK
+# KROK 3 – DAŇOVÉ PRIZNANIE ZA KONKRÉTNY ROK
 # =========================================================================
-with tab2:
-    st.header("📅 Súhrn pre daňové priznanie za zvolený rok")
+elif aktivny_krok == KROKY[1]:
+    st.header("📅 Krok 3: Súhrn pre daňové priznanie za zvolený rok")
+    with st.expander("❓ Čo je toto a čo mám robiť?"):
+        st.write(
+            "Tu nájdeš spätný pohľad na to, čo si počas zvoleného roka **už reálne predal, dostal na "
+            "dividendách a zarobil na úrokoch**. Tieto čísla použi priamo do daňového priznania za daný rok "
+            "(v SR sa priznanie za rok X podáva do konca marca roka X+1)."
+        )
 
     years = set()
     if not realized_df.empty:
@@ -390,7 +514,10 @@ with tab2:
         st.info("V nahraných dátach sa nenašli žiadne predaje, dividendy ani úroky.")
     else:
         years_sorted = sorted(years, reverse=True)
-        zvoleny_rok = st.selectbox("Vyber daňový rok (rok, za ktorý sa podáva priznanie v SR):", years_sorted)
+        zvoleny_rok = st.selectbox(
+            "Vyber daňový rok (rok, za ktorý sa podáva priznanie v SR):", years_sorted,
+            help="Vyber rok, v ktorom sa transakcia (predaj, dividenda, úrok) skutočne uskutočnila.")
+        st.caption(f"📍 Práve prezeráš daňové obdobie **{zvoleny_rok}**.")
 
         # --- Realizované predaje za rok ---
         r_year = realized_df[realized_df["sell_year"] == zvoleny_rok] if not realized_df.empty else pd.DataFrame()
@@ -406,18 +533,33 @@ with tab2:
 
         st.subheader("📈 Realizované predaje (kapitálové zisky)")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Zisk oslobodený od dane (>365 dní)", f"{sk_num(zisk_oslobodeny)} €")
-        c2.metric("Zdaniteľný zisk/strata (<365 dní), netto", f"{sk_num(zisk_zdanitelny_net)} €")
-        c3.metric("Základ dane (min. 0)", f"{sk_num(zaklad_dane)} €")
+        c1.metric("Zisk oslobodený od dane (>365 dní)", f"{sk_num(zisk_oslobodeny)} €",
+                   help=metric_help("Súčet ziskov z predajov, kde balíček splnil 365-dňový časový test.",
+                                     "Tento zisk sa NEUVÁDZA ako zdaniteľný príjem."))
+        c2.metric("Zdaniteľný zisk/strata (<365 dní), netto", f"{sk_num(zisk_zdanitelny_net)} €",
+                   help=metric_help("Čistý súčet ziskov a strát z balíčkov mladších ako 365 dní.",
+                                     "Toto číslo (ak je kladné) je základ pre výpočet dane nižšie."))
+        c3.metric("Základ dane (min. 0)", f"{sk_num(zaklad_dane)} €",
+                   help=metric_help("Rovnaké ako zdaniteľný zisk vyššie, ale nikdy nie záporné.",
+                                     "Toto číslo prepíš do daňového priznania ako čiastkový základ dane z §8."))
 
-        st.error(f"⚠️ Odhadovaná daň z kapitálových príjmov za {zvoleny_rok}: daň z príjmu (19%) "
-                 f"`{sk_num(dan_z_predaja)} €` + zdravotné odvody (14%)* `{sk_num(odvody_z_predaja)} €` "
-                 f"= **{sk_num(dan_z_predaja + odvody_z_predaja)} €**")
+        m1, m2 = st.columns(2)
+        m1.metric("💸 Daň z príjmu (19%)", f"{sk_num(dan_z_predaja)} €")
+        m2.metric("🏥 Zdravotné odvody (14%)*", f"{sk_num(odvody_z_predaja)} €")
         st.caption("*Straty a zisky sa tu netujú len v rámci zdaniteľnej (mladej) skupiny. Oslobodené obchody "
                    "(>365 dní) sa do základu dane nezapočítavajú. Toto je orientačný výpočet, nie daňové poradenstvo.")
 
+        with st.expander("🧮 Over si výpočet dane z predaja sám"):
+            st.code(
+f"""Základ dane          = súčet ziskov − súčet strát zo ZDANITEĽNÝCH balíčkov (min. 0)
+                       = {zisk_zdanitelny_net:.2f} € → základ dane = {zaklad_dane:.2f} €
+
+Daň z príjmu (19 %)   = {zaklad_dane:.2f} € × 0,19 = {dan_z_predaja:.2f} €
+Zdravotné odvody (14 %) = {zaklad_dane:.2f} € × 0,14 = {odvody_z_predaja:.2f} €
+SPOLU                 = {dan_z_predaja:.2f} € + {odvody_z_predaja:.2f} € = {dan_z_predaja + odvody_z_predaja:.2f} €""")
+
         if not r_year.empty:
-            with st.expander("Zobraziť detail všetkých predajov za rok " + str(zvoleny_rok)):
+            with st.expander("📋 Zobraziť detail všetkých predajov za rok " + str(zvoleny_rok)):
                 show = r_year.copy()
                 show["Ticker"] = show["ticker"]
                 show["Nákup"] = show["buy_date"].dt.strftime("%d.%m.%Y")
@@ -428,7 +570,7 @@ with tab2:
                               "Dni_drzania", "Stav"]]
                 show.columns = ["Ticker", "Dátum nákupu", "Dátum predaja", "Množstvo", "Náklady (€)",
                                  "Výnos (€)", "Zisk/Strata (€)", "Dní držania", "Daňový stav"]
-                st.dataframe(show, use_container_width=True)
+                st.dataframe(show, width='stretch')
 
         # --- Dividendy za rok ---
         d_year = dividends_df[dividends_df["Rok"] == zvoleny_rok] if not dividends_df.empty else pd.DataFrame()
@@ -437,8 +579,11 @@ with tab2:
 
         st.subheader("💰 Dividendy")
         d1, d2, d3 = st.columns(3)
-        d1.metric("Brutto dividendy", f"{sk_num(brutto_div)} €")
-        d2.metric("Zahraničná zrazená daň", f"{sk_num(zrazena_div)} €")
+        d1.metric("Brutto dividendy", f"{sk_num(brutto_div)} €",
+                   help=metric_help("Dividenda pred zrazením zahraničnej dane.", "Toto je základ pre výpočet SK dane."))
+        d2.metric("Zahraničná zrazená daň", f"{sk_num(zrazena_div)} €",
+                   help=metric_help("Daň, ktorú už zrazil zahraničný štát (napr. USA) priamo pri výplate.",
+                                     "Túto sumu si možno budeš môcť započítať voči SK dani – over s účtovníkom."))
         d3.metric("Netto prijaté", f"{sk_num(brutto_div - zrazena_div)} €")
 
         # --- Úroky za rok ---
@@ -453,22 +598,31 @@ with tab2:
 
         # --- Kompletný CSV export pre rok ---
         st.markdown("---")
-        st.subheader(f"📥 Kompletný report pre účtovníka – rok {zvoleny_rok}")
+        st.subheader(f"📥 Krok 4: Stiahni kompletný report pre účtovníka – rok {zvoleny_rok}")
+        st.write("Tento CSV obsahuje všetky čísla vyššie aj s vysvetľujúcimi riadkami, aby im rozumel aj "
+                 "účtovník, ktorý s Trading 212 nepracuje.")
 
-        report_rows = [["=== SÚHRN ZA ROK", str(zvoleny_rok), "", "", "", "", ""]]
-        report_rows.append(["Kategória", "Suma (EUR)", "", "", "", "", ""])
-        report_rows.append(["Oslobodený zisk z predaja akcií", f"{zisk_oslobodeny:.2f}"])
-        report_rows.append(["Zdaniteľný zisk/strata z predaja akcií (netto)", f"{zisk_zdanitelny_net:.2f}"])
-        report_rows.append(["Základ dane z predaja (min. 0)", f"{zaklad_dane:.2f}"])
-        report_rows.append(["Daň z príjmu z predaja (19%)", f"{dan_z_predaja:.2f}"])
-        report_rows.append(["Zdravotné odvody z predaja (14%, orientačne)", f"{odvody_z_predaja:.2f}"])
-        report_rows.append(["Dividendy brutto", f"{brutto_div:.2f}"])
-        report_rows.append(["Dividendy - zahraničná zrazená daň", f"{zrazena_div:.2f}"])
-        report_rows.append(["Dividendy netto", f"{brutto_div - zrazena_div:.2f}"])
-        report_rows.append(["Úroky spolu", f"{uroky_total:.2f}"])
-        report_rows.append(["Odhadovaná daň z úrokov (19%)", f"{dan_uroky:.2f}"])
+        report_rows = [["VYSVETLENIE", "Toto je danovy report z Trading 212 pre SR, rok " + str(zvoleny_rok)]]
+        report_rows.append(["VYSVETLENIE", "Ceny su v EUR. Desatinne cislo pouziva ciarku, oddelovac stlpcov je bodkociarka."])
         report_rows.append([""])
-        report_rows.append(["=== DETAIL PREDAJOV", "", "", "", "", "", ""])
+        report_rows.append(["=== SUHRN ZA ROK", str(zvoleny_rok)])
+        report_rows.append(["Kategoria", "Suma (EUR)", "Vysvetlenie"])
+        report_rows.append(["Oslobodeny zisk z predaja akcii", f"{zisk_oslobodeny:.2f}",
+                             "Zisk z akcii drzanych 365+ dni - nezdanuje sa"])
+        report_rows.append(["Zdanitelny zisk/strata z predaja akcii (netto)", f"{zisk_zdanitelny_net:.2f}",
+                             "Akcie drzane menej ako 365 dni"])
+        report_rows.append(["Zaklad dane z predaja (min. 0)", f"{zaklad_dane:.2f}",
+                             "Zaklad pre vypocet dane z prijmu (par. 8)"])
+        report_rows.append(["Dan z prijmu z predaja (19%)", f"{dan_z_predaja:.2f}", ""])
+        report_rows.append(["Zdravotne odvody z predaja (14%, orientacne)", f"{odvody_z_predaja:.2f}",
+                             "Over presne pravidla s poistovnou/uctovnikom"])
+        report_rows.append(["Dividendy brutto", f"{brutto_div:.2f}", "Pred zrazenim zahranicnej dane"])
+        report_rows.append(["Dividendy - zahranicna zrazena dan", f"{zrazena_div:.2f}", ""])
+        report_rows.append(["Dividendy netto", f"{brutto_div - zrazena_div:.2f}", "Realne pripisana suma"])
+        report_rows.append(["Uroky spolu", f"{uroky_total:.2f}", ""])
+        report_rows.append(["Odhadovana dan z urokov (19%)", f"{dan_uroky:.2f}", ""])
+        report_rows.append([""])
+        report_rows.append(["=== DETAIL PREDAJOV", "", ""])
         report_rows.append(["Ticker", "Datum nakupu", "Datum predaja", "Mnozstvo", "Naklady EUR",
                              "Vynos EUR", "Zisk/Strata EUR", "Dni drzania", "Danovy stav"])
         if not r_year.empty:
@@ -479,7 +633,7 @@ with tab2:
                     str(rr["held_days"]), "Oslobodene" if rr["exempt"] else "Zdanuje sa"
                 ])
         report_rows.append([""])
-        report_rows.append(["=== DETAIL DIVIDEND", "", "", "", "", "", ""])
+        report_rows.append(["=== DETAIL DIVIDEND", "", ""])
         report_rows.append(["Ticker", "Datum", "Brutto EUR", "Zrazena dan EUR", "Netto EUR"])
         if not d_year.empty:
             for _, dd in d_year.iterrows():
@@ -488,7 +642,7 @@ with tab2:
                     f"{dd['Brutto']:.2f}", f"{dd['Zrazena_dan']:.2f}", f"{dd['Netto']:.2f}"
                 ])
         report_rows.append([""])
-        report_rows.append(["=== DETAIL UROKOV", "", "", "", "", "", ""])
+        report_rows.append(["=== DETAIL UROKOV", "", ""])
         report_rows.append(["Datum", "Suma EUR"])
         if not i_year.empty:
             for _, ii in i_year.iterrows():
@@ -496,22 +650,30 @@ with tab2:
 
         full_csv = rows_to_csv_sk(report_rows)
         st.download_button(
-            label=f"📥 STIAHNUŤ KOMPLETNÝ DAŇOVÝ REPORT ZA ROK {zvoleny_rok} (CSV)",
+            label=f"📥 STIAHNUŤ KOMPLETNÝ DAŇOVÝ REPORT ZA ROK {zvoleny_rok} (CSV, s vysvetleniami)",
             data=full_csv.encode("utf-8-sig"),
             file_name=f"t212_danovy_report_{zvoleny_rok}.csv",
             mime="text/csv", key="btn_export_rocny_report")
 
 # =========================================================================
-# TAB 3 – DIVIDENDY (celá história, filtrovateľná)
+# KROK 4 – DIVIDENDY (celá história, filtrovateľná)
 # =========================================================================
-with tab3:
-    st.header("💰 História dividend")
+elif aktivny_krok == KROKY[2]:
+    st.header("💰 Krok 4: História dividend")
+    with st.expander("❓ Čo je brutto/netto/zrazená daň?"):
+        st.write(
+            "**Brutto** = celá dividenda pred zdanením. **Zahraničná zrazená daň** = časť, ktorú si už "
+            "strhol štát emitenta (napr. USA) priamo pri výplate. **Netto** = suma, ktorá ti reálne prišla "
+            "na účet. Do SR daňového priznania sa typicky uvádza brutto suma a zrazená daň sa môže "
+            "čiastočne započítať – over si presný postup s účtovníkom."
+        )
     if dividends_df.empty:
         st.info("V nahraných CSV sa nenašli žiadne dividendové platby.")
     else:
         rok_filter = st.multiselect("Filtrovať podľa roka:",
                                      sorted(dividends_df["Rok"].unique(), reverse=True),
-                                     key="div_rok_filter")
+                                     key="div_rok_filter",
+                                     help="Nechaj prázdne pre zobrazenie všetkých rokov naraz.")
         show_div = dividends_df.copy()
         if rok_filter:
             show_div = show_div[show_div["Rok"].isin(rok_filter)]
@@ -524,7 +686,7 @@ with tab3:
         display = show_div[["Time", "Ticker_Clean", "Brutto", "Zrazena_dan", "Netto"]].copy()
         display["Time"] = display["Time"].dt.strftime("%d.%m.%Y")
         display.columns = ["Dátum", "Ticker", "Brutto (€)", "Zrazená daň (€)", "Netto (€)"]
-        st.dataframe(display, use_container_width=True)
+        st.dataframe(display, width='stretch')
 
         div_csv_rows = [["Datum", "Ticker", "Brutto EUR", "Zrazena dan EUR", "Netto EUR"]]
         for _, row in show_div.iterrows():
@@ -539,16 +701,23 @@ with tab3:
                    "over podľa krajiny emitenta – tento nástroj zámerne neuhaduje sadzbu automaticky.")
 
 # =========================================================================
-# TAB 4 – ÚROKY
+# KROK 5 – ÚROKY
 # =========================================================================
-with tab4:
-    st.header("💶 História úrokov z nevloženej hotovosti")
+elif aktivny_krok == KROKY[3]:
+    st.header("💶 Krok 5: História úrokov z nevloženej hotovosti")
+    with st.expander("❓ Čo sú toto za úroky?"):
+        st.write(
+            "Trading 212 platí úrok z hotovosti, ktorú máš na účte a nemáš zainvestovanú. Tento príjem sa "
+            "v SR zdaňuje ako 'ostatný príjem' – zvyčajne sadzbou 19 %, pri vyššom ročnom základe dane "
+            "môže platiť vyššia sadzba 25 %."
+        )
     if interest_df.empty:
         st.info("V nahraných CSV sa nenašli žiadne úrokové platby.")
     else:
         rok_filter_i = st.multiselect("Filtrovať podľa roka:",
                                        sorted(interest_df["Rok"].unique(), reverse=True),
-                                       key="int_rok_filter")
+                                       key="int_rok_filter",
+                                       help="Nechaj prázdne pre zobrazenie všetkých rokov naraz.")
         show_int = interest_df.copy()
         if rok_filter_i:
             show_int = show_int[show_int["Rok"].isin(rok_filter_i)]
@@ -563,7 +732,7 @@ with tab4:
         display_i = show_int[["Time", "Total"]].copy()
         display_i["Time"] = display_i["Time"].dt.strftime("%d.%m.%Y")
         display_i.columns = ["Dátum", "Suma (€)"]
-        st.dataframe(display_i, use_container_width=True)
+        st.dataframe(display_i, width='stretch')
 
         int_csv_rows = [["Datum", "Suma EUR"]]
         for _, row in show_int.iterrows():
