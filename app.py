@@ -44,61 +44,77 @@ def clean_numeric_string(val):
     except ValueError:
         return 0.0
 
-def normalize_columns(df):
-    """Mapuje iba kritické stĺpce, menu (Currency) úplne ignorujeme."""
-    mapping = {
-        'time': 'Time', 'čas': 'Time', 'cas': 'Time',
-        'action': 'Action', 'operácia': 'Action', 'operacia': 'Action', 'typ': 'Action',
-        'ticker': 'Ticker', 'symbol': 'Ticker',
-        'name': 'Name', 'názov': 'Name', 'nazov': 'Name',
-        'no. of shares': 'Shares', 'kusy': 'Shares', 'množstvo': 'Shares', 'mnozstvo': 'Shares',
-        'price per share': 'PricePerShare', 'cena za kus': 'PricePerShare',
-        'total': 'Total', 'celkom': 'Total', 'suma': 'Total'
-    }
-    renamed_cols = {}
-    for col in df.columns:
-        col_lower = str(col).lower().strip()
-        if col_lower in mapping:
-            renamed_cols[col] = mapping[col_lower]
-        else:
-            for key, target in mapping.items():
-                if key in col_lower:
-                    renamed_cols[col] = target
-                    break
-    df = df.rename(columns=renamed_cols)
+def extract_clean_records(file):
+    """Načíta CSV, nájde správne stĺpce nezávisle od indexov a vráti čistý zoznam riadkov."""
+    try:
+        df = pd.read_csv(file)
+    except Exception:
+        return []
+        
+    # Reset indexov pre istotu, ak by CSV malo divný formát
+    df = df.reset_index(drop=True)
     
-    # Garantujeme existenciu iba základných stĺpcov
-    required_keys = ['Time', 'Action', 'Ticker', 'Name', 'Shares', 'PricePerShare', 'Total']
-    for req in required_keys:
-        if req not in df.columns:
-            if req in ['Action', 'Ticker', 'Name']:
-                df[req] = 'UNKNOWN'
-            else:
-                df[req] = 0.0
-    return df
+    # Nájdenie stĺpcov podľa kľúčových slov
+    col_mapping = {}
+    keywords = {
+        'Time': ['time', 'čas', 'cas', 'typ'],
+        'Action': ['action', 'operácia', 'operacia', 'typ obchodu'],
+        'Ticker': ['ticker', 'symbol'],
+        'Name': ['name', 'názov', 'nazov', 'spoločnosť'],
+        'Shares': ['no. of shares', 'kusy', 'množstvo', 'mnozstvo', 'počet'],
+        'PricePerShare': ['price per share', 'cena za kus', 'cena'],
+        'Total': ['total', 'celkom', 'suma']
+    }
+    
+    # Priradenie reálneho názvu stĺpca z CSV ku kľúčovému slovu
+    for target_key, phrases in keywords.items():
+        for col in df.columns:
+            if str(col).lower().strip() in phrases:
+                col_mapping[target_key] = col
+                break
+        # Ak nenašlo presnú zhodu, skús čiastočnú (napr. "Total (EUR)")
+        if target_key not in col_mapping:
+            for col in df.columns:
+                if any(p in str(col).lower() for p in phrases):
+                    col_mapping[target_key] = col
+                    break
+
+    records = []
+    for _, row in df.iterrows():
+        # Vytiahnutie hodnôt s fallbackom, ak stĺpec chýba
+        r_time = row[col_mapping['Time']] if 'Time' in col_mapping else np.nan
+        r_action = row[col_mapping['Action']] if 'Action' in col_mapping else 'UNKNOWN'
+        r_ticker = row[col_mapping['Ticker']] if 'Ticker' in col_mapping else 'UNKNOWN'
+        r_name = row[col_mapping['Name']] if 'Name' in col_mapping else 'UNKNOWN'
+        
+        r_shares = clean_numeric_string(row[col_mapping['Shares']]) if 'Shares' in col_mapping else 0.0
+        r_price = clean_numeric_string(row[col_mapping['PricePerShare']]) if 'PricePerShare' in col_mapping else 0.0
+        r_total = clean_numeric_string(row[col_mapping['Total']]) if 'Total' in col_mapping else 0.0
+        
+        records.append({
+            'Time': r_time,
+            'Action': str(r_action),
+            'Ticker': str(r_ticker),
+            'Name': str(r_name),
+            'Shares': r_shares,
+            'PricePerShare': r_price,
+            'Total': r_total
+        })
+    return records
 
 def process_uploaded_files(uploaded_files):
-    df_list = []
+    all_records = []
     for file in uploaded_files:
-        try:
-            current_df = pd.read_csv(file)
-            current_df = normalize_columns(current_df)
-            df_list.append(current_df)
-        except Exception as e:
-            st.error(f"Chyba pri čítaní súboru: {e}")
-            continue
-            
-    if not df_list:
+        file_records = extract_clean_records(file)
+        all_records.extend(file_records)
+        
+    if not all_records:
         return None
         
-    combined_df = pd.concat(df_list, ignore_index=True)
+    # Vytvorenie finálneho DataFrame z čistého Python zoznamu (odstraňuje InvalidIndexError)
+    combined_df = pd.DataFrame(all_records)
     
-    # Vyčistenie číselných stĺpcov
-    combined_df['Shares'] = combined_df['Shares'].apply(clean_numeric_string)
-    combined_df['PricePerShare'] = combined_df['PricePerShare'].apply(clean_numeric_string)
-    combined_df['Total'] = combined_df['Total'].apply(clean_numeric_string)
-    
-    # Prevod dátumu
+    # Konverzia dátumu
     combined_df['Time'] = pd.to_datetime(combined_df['Time'], format='mixed', errors='coerce')
     combined_df = combined_df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     return combined_df
@@ -122,15 +138,15 @@ def run_fifo_engine(df):
     t_exempt, t_taxable, t_years = [], [], []
     
     for idx, row in valid_df.iterrows():
-        ticker = str(row['Ticker']).strip().upper() if pd.notna(row['Ticker']) else 'UNKNOWN'
-        if ticker in ['UNKNOWN', 'NAN', '']:
+        ticker = str(row['Ticker']).strip().upper()
+        if ticker in ['UNKNOWN', 'NAN', '', 'NONE']:
             continue
             
         action = str(row['Action']).lower()
         row_date = row['Time']
         shares = abs(row['Shares'])
         price_eur = row['PricePerShare']
-        name = row['Name'] if pd.notna(row['Name']) else ticker
+        name = row['Name'] if row['Name'] != 'UNKNOWN' else ticker
         
         if ticker not in fifo_pools:
             fifo_pools[ticker] = []
@@ -219,7 +235,7 @@ def run_fifo_engine(df):
 # HLAVNÝ RENDER STRÁNKY (UI)
 # ==========================================
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212")
-st.caption("Verzia 4.3: Úplne odstránený stĺpec Currency z parsovania. Maximálna stabilita.")
+st.caption("Verzia 4.4: Kompletne odstránené spájanie indexov cez Pandas. Definitívny opravný balík.")
 
 st.header("1. Vstup dát (Hromadný import CSV)")
 uploaded_files = st.file_uploader(
@@ -249,21 +265,3 @@ except Exception as fatal_err:
 st.header("2. Výber daňového obdobia")
 available_years = ["Všetky"]
 if not df_main.empty:
-    years_found = sorted(list(df_main['Time'].dt.year.unique()))
-    available_years.extend([str(y) for y in years_found])
-
-cols_years = st.columns(len(available_years))
-for idx, yr in enumerate(available_years):
-    if cols_years[idx].button(f"📅 {yr}", key=f"btn_yr_{yr}"):
-        st.session_state.selected_year = yr
-
-st.write(f"Aktívne daňové obdobie: **{st.session_state.selected_year}**")
-
-if st.session_state.selected_year == "Všetky":
-    df_filtered_trades = df_trades
-else:
-    target_year = int(st.session_state.selected_year)
-    df_filtered_trades = df_trades[df_trades['Rok_Predaja'] == target_year] if not df_trades.empty else pd.DataFrame()
-
-# SEKCIA 3: VÝPOČET DANÍ A ODVODOV ZA VYBRANÝ ROK
-
