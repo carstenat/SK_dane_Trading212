@@ -143,39 +143,42 @@ if uploaded_files:
                 vydavok_mladeho_balika += cena_balika
                 d_oslobodenia = (nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y')
                 zostava_dni = 365 - vek_dni
-                riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
+                riadok_prehladu = f"🔴 **ZDAŇUJE Sa** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
                 rozpis_textov.append(riadok_prehladu)
                 export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Zdanuje sa", d_oslobodenia, f"{zostava_dni} dni"])
         
         ks_bez_dane = round(ks_bez_dane, 5)
         ks_mlade = round(ks_mlade, 5)
         
-        st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
-        vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
-        st.progress(max(0.0, min(1.0, vypocitany_pomer)))
-        
-        trhova_hodnota_safe = ks_bez_dane * aktualna_cena
-        cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
-        st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
-        
-        trhova_hodnota_mlade = ks_mlade * aktualna_cena
-        zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
-        dan_19 = round(zisk_mlade * 0.19, 2)
-        odvody_14 = round(zisk_mlade * 0.14, 2)
-        celkovy_vypal_statu = dan_19 + odvody_14
-        
-        st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
-        st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: `{zisk_mlade:.2f} EUR` | Daň z príjmu (19%): `{dan_19:.2f} EUR` | Zdravotné odvody (14%): `{odvody_14:.2f} EUR` | **Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR**")
-        
-        # =========================================================================
-        # 📋 ROZBALENÝ AKCIOVÝ BREAKDOWN (Zostáva natvrdo vybalený na ploche)
-        # =========================================================================
-        st.markdown("---")
-        st.subheader("📋 Detailný rozpis nákupných balíčkov (Frakcií)")
-        
-        csv_string = "\n".join([",".join(row) for row in export_csv_riadky])
-        st.download_button(label="📥 STIAHNUŤ TENTO ROZPIS FRAKCIÍ DO EXCELU (CSV)", data=csv_string.encode('utf-8'), file_name=f"t212_rozpis_frakcii_{vybrany_ticker_pure}.csv", mime="text/csv", key="btn_export_frakcii_v980")
-        
-        st.write("Chronologický prehľad balíčkov na sklade:")
-        for r_text in rozpis_textov:
-            st.write(r_text)
+        # Oprava a dokončenie pôvodne useknutej logiky:
+        if skutocny_stav > 0:
+            vypocitany_pomer = float(ks_bez_dane / skutocny_stav)
+            st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks ({vypocitany_pomer * 100:.1f}%)")
+            st.progress(vypocitany_pomer)
+        else:
+            st.info("Zadajte počet kusov, ktoré vlastníte, pre zobrazenie daňového prehľadu.")
+            
+        # Zobrazenie prehľadných metrík
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            st.metric("Oslobodené od dane (ks)", f"{ks_bez_dane:.5f}")
+        with m2:
+            st.metric("Podlieha dani (ks)", f"{ks_mlade:.5f}")
+        with m3:
+            st.metric("Celkom k predaju (ks)", f"{skutocny_stav:.5f}")
+            
+        # Detailný výpis jednotlivých nákupných balíkov
+        if rozpis_textov:
+            st.markdown("### 📋 Detailný rozpis nákupných balíkov (FIFO)")
+            for text in rozpis_textov:
+                st.write(text)
+                
+            # Možnosť stiahnuť výsledky ako CSV
+            df_export = pd.DataFrame(export_csv_riadky[1:], columns=export_csv_riadky[0])
+            csv_data = df_export.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Stiahnuť daňový rozpis (CSV)",
+                data=csv_data,
+                file_name=f"danovy_rozpis_{vybrany_ticker_pure}.csv",
+                mime="text/csv"
+            )
