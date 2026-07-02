@@ -41,7 +41,7 @@ if uploaded_files:
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     
     # =========================================================================
-    # 💰 GLOBALNE MODULY: DIVIDENDY A ÚROKY (ZOBRAZENÉ HNEĎ NA ZAČIATKU)
+    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY
     # =========================================================================
     df_dividendy = df[df['Action'].str.lower().str.contains('dividend', na=False)].copy()
     df_uroky = df[df['Action'].str.lower().str.contains('interest', na=False)].copy()
@@ -81,7 +81,7 @@ if uploaded_files:
         else:
             st.info("V importovaných súboroch sa nenachádzajú žiadne záznamy o úrokoch z hotovosti.")
 
-    # Processing pre akcie
+    # Spracovanie dát pre akcie
     df = df.dropna(subset=['Time', 'Ticker']).sort_values(by='Time').reset_index(drop=True)
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
@@ -123,7 +123,9 @@ if uploaded_files:
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
-        # FIFO MOTOR
+        # =========================================================================
+        # ⚙️ BEZPEČNÝ FIFO PÁROVACÍ MOTOR (OCHRANA PRED DELENÍM NULOU)
+        # =========================================================================
         sklad_aktualny = []
         for _, riadok in df_ticker.iterrows():
             typ = str(riadok['Action']).lower()
@@ -132,8 +134,9 @@ if uploaded_files:
             datum = riadok['Time']
             
             if 'buy' in typ or 'nákup' in typ or 'nakup' in typ:
+                # Ochrana: spracujeme nákup iba ak je počet kusov reálne väčší ako nula
                 if shares > 0.00001:
-                    sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
+                    sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total / shares})
             elif 'sell' in typ or 'predaj' in typ or shares < 0:
                 predat_este = abs(shares)
                 for b in sklad_aktualny:
@@ -186,6 +189,3 @@ if uploaded_files:
             else:
                 ks_mlade += vziat_ks
                 vydavok_mladeho_balika += cena_balika
-                d_oslobodenia = (nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y')
-                zostava_dni = 365 - vek_dni
-                riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
