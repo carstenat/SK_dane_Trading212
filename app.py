@@ -121,7 +121,6 @@ if uploaded_files:
         with col2:
             aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR:", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_final")
         
-        # PRIDANÉ TLAČIDLO PRE VYNÚTENIE PREPOČTU (ZABRÁNI ZASEKNUTIU STREAMLITU)
         spustit_vypocet = st.button("🚀 Spustiť daňový prepočet pre vybranú akciu", type="primary", use_container_width=True)
         
         if spustit_vypocet and vstup_vlastnene > 0:
@@ -165,7 +164,7 @@ if uploaded_files:
             zoznam_riadkov_exportu = []
             
             for n in sklad_aktualny:
-                if potrebné_ks < 1e-5:
+                if potrebne_ks < 1e-5:
                     break
                 vziat_ks = min(n['shares'], potrebne_ks)
                 potrebne_ks -= vziat_ks
@@ -186,3 +185,5 @@ if uploaded_files:
                     vydavok_safe_balika += cena_balika
                     riadok_prehladu = f"🟢 **BEZ DANE** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Netreba čakať (Oslobodené)"
                     rozpis_textov.append(riadok_prehladu)
+                    zoznam_riadkov_exportu.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Bez dane", "Uz oslobodene", "0", f"{aktualna_hodnota_balika:.2f}", f"{zisk_balika:.2f}"])
+                else:
