@@ -47,7 +47,7 @@ if uploaded_files:
     df_global['Ticker_Clean'] = df_global['Ticker'].fillna('').astype(str).str.strip().str.upper()
     df_global['Rok'] = df_global['Time'].dt.year
     
-    # 📅 GLOBÁLNY PREPÍNAČ DAŇOVÉHO ROKA (Pre dividendy a úroky)
+    # 📅 PREPÍNAČ ROKOV PRE ROČNÉ DAŇOVÉ PODKLADY
     st.markdown("---")
     st.header("📅 Výber daňového obdobia (Roku)")
     dostupne_roky = sorted([int(x) for x in df_global['Rok'].unique() if pd.notna(x)])
@@ -88,7 +88,7 @@ if uploaded_files:
         with col2:
             aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_final")
         
-        # 🚀 FIFO POČÍTA CEZ KOMPLETNÚ HISTÓRIU (Bez orezania rokmi)
+        # 🚀 FIFO POČÍTA SKLAD CEZ CELÚ GLOBÁLNU HISTÓRIU (Bez orezania rokmi)
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
         sklad_aktualny = []
@@ -107,7 +107,7 @@ if uploaded_files:
                     if predat_este > 1e-6 and b['shares'] > 0:
                         vziat = min(b['shares'], predat_este)
                         b['shares'] -= vziat
-                        predat_este -= predat_este_check := vziat
+                        predat_este -= vziat
                 sklad_aktualny = [x for x in sklad_aktualny if x['shares'] > 1e-6]
         
         max_sklad_dostupny = sum([x['shares'] for x in sklad_aktualny])
@@ -128,7 +128,7 @@ if uploaded_files:
         export_csv_riadky = [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup", "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
         
         for n in sklad_aktualny:
-            if potrebne_ks < 1e-5:
+            if potrebné_ks_pure_check := (potrebne_ks < 1e-5):
                 break
             vziat_ks = min(n['shares'], potrebne_ks)
             potrebne_ks -= vziat_ks
