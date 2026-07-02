@@ -115,7 +115,6 @@ if uploaded_files:
         vydavok_mladeho_balika = 0.0
         
         rozpis_textov = []
-        # 🛡️ PRÍPRAVA DÁT PRE SŤAHOVATEĽNÝ CSV SÚBOR
         export_csv_riadky = [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup", "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
         
         for n in sklad_aktualny:
@@ -155,28 +154,31 @@ if uploaded_files:
         vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
         st.progress(max(0.0, min(1.0, vypocitany_pomer)))
         
+        # 🔓 ZELENÁ KARTA
         trhova_hodnota_safe = ks_bez_dane * aktualna_cena
         cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
         st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
         
-        st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): **{ks_mlade:.5f} ks**")
-        
+        # 🔓 ORANŽOVO-ŽLTÁ VÝSTRAHA
         trhova_hodnota_mlade = ks_mlade * aktualna_cena
         zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
         dan_19 = round(zisk_mlade * 0.19, 2)
         odvody_14 = round(zisk_mlade * 0.14, 2)
         celkovy_vypal_statu = dan_19 + odvody_14
+        
+        st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
         st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: `{zisk_mlade:.2f} EUR` | Daň z príjmu (19%): `{dan_19:.2f} EUR` | Zdravotné odvody (14%): `{odvody_14:.2f} EUR` | **Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR**")
         
         # =========================================================================
-        # 🛡️ TRI SVIETIACE EXPANDERY (ZÁVÄZNE ZAROVNANÉ NA PLOCHO NA ÚPLNOM KONCI)
+        # 📊 NATVRDO VYBALENÝ ROZPIS FRAKCIÍ S PRIAMYM TLAČIDLOM (BEZ DROPDOWNU)
         # =========================================================================
-        st.markdown("##")
+        st.markdown("---")
+        st.subheader("📋 Detailný rozpis nákupných balíčkov (Frakcií)")
         
-        expander_frakcii = st.expander("📋 Zobraziť detailný rozpis nákupných balíčkov (Frakcií)")
-        expander_frakcii.write("Tu nájdete kompletný chronologický zoznam vašich nákupov, z ktorých je poskladaná dnešná otvorená pozícia:")
-        for r_text in rozpis_textov:
-            expander_frakcii.write(r_text)
-            
-        # 📥 TLAČIDLO VLOŽENÉ PLOCHO POD TEXTY (Čisté zlúčenie stringov cez Python \n)
-        expander_frakcii.markdown("---")
+        # 💾 TLAČIDLO SVIETI NATVRDO TU NA PLOCHE!
+        csv_string = "\n".join([",".join(row) for row in export_csv_riadky])
+        st.download_button(
+            label="📥 STIAHNUŤ TENTO ROZPIS FRAKCIÍ DO EXCELU (CSV)", 
+            data=csv_string.encode('utf-8'), 
+            file_name=f"t212_rozpis_frakcii_{vybrany_ticker_pure}.csv", 
+            mime="text/csv", 
