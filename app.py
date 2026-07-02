@@ -44,7 +44,7 @@ if uploaded_files:
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🔍 UNIVERZÁLNE PREMENOVANIE STĹPCOV - Ochrana cez booleovské prepínače z retrospektívy
+    # 🔍 UNIVERZÁLNE PREMENOVANIE STĹPCOV - Vlajky z vašej technickej retrospektívy
     mapovanie_stlpcov = {}
     najdeny_shares = False
     najdeny_total = False
@@ -133,17 +133,13 @@ if st.session_state.databaza_transakcii is not None:
         else:
             st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
 
-    # Safe-typing pre matematické operácie na akcie
-    df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
-    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
-
     # =========================================================================
-    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (ÚPLNE PLOCHÝ BEZ-ZLYHADOVÝ FIFO ENGINE)
+    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (ÚPLNE PLOCHÝ FIFO ENGINE)
     # =========================================================================
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
-    # Čistenie NaN hodnôt v Ticker a Time podľa požiadavky retrospektívy
+    # Izolované čistenie a filtrovanie NaN iba pre potreby akcií (Ochrana z retrospektívy)
     df_akcie_len = df.dropna(subset=['Time', 'Ticker']).copy()
     df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
     df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != '']
@@ -162,7 +158,6 @@ if st.session_state.databaza_transakcii is not None:
     realizovane_obchody_rok = []
     otvorene_loty_portfolio = {}
 
-    # ÚPLNE PLOCHÝ ZÁPIS FIFO ENGIE-U: Žiadne hlboké vnorené while ani else bloky!
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
         nakupne_loty = []
@@ -181,7 +176,8 @@ if st.session_state.databaza_transakcii is not None:
                 
             if is_sell and len(nakupne_loty) > 0:
                 množstvo_na_predaj = množstvo
-                # Použitie bezpečného prechodu poľa namiesto nebezpečného vnorenia riadkov
+                
+                # Bezpečný prechod zoznamu (Flattened) bez vnorených while cyklov
                 for lot in list(nakupne_loty):
                     if lot['množstvo'] <= 0 or množstvo_na_predaj <= 0:
                         continue
@@ -192,3 +188,8 @@ if st.session_state.databaza_transakcii is not None:
                     
                     prijem = odpredane_množstvo * cena_ks
                     vydaj = odpredane_množstvo * lot['cena_nakup']
+                    zisk_z_predaja = prijem - vydaj
+                    
+                    dni_drzania = (row['Time'] - lot['datum_nakup']).days
+                    oslobodene = (dni_drzania >= 365)
+                    
