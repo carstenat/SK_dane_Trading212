@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 # ==========================================
 TAX_RATE_SK = 0.19
 HEALTH_INSURANCE_RATE_SK = 0.15
-TAX_EXEMPTION_LIMIT_SK = 500.0
+TAX_EXEMPTION_LIMIT_SK = 500.0  # § 9 ods. 1 písm. k) ZDP
 
 st.set_page_config(
     page_title="Súkromný PRO Optimalizátor pre Trading 212",
@@ -19,7 +19,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Inicializácia Session State proti resetu dát
+# Inicializácia Session State proti nechcenému resetu dát
 if 'df_raw' not in st.session_state:
     st.session_state.df_raw = None
 if 'selected_year' not in st.session_state:
@@ -33,11 +33,11 @@ def fetch_ecb_daily_rates_for_year(year):
     """Sťahuje historické denné kurzy USD a GBP voči EUR z ECB pre daný rok."""
     rates = {'USD': {}, 'GBP': {}}
     try:
-        url = "https://europa.eu"
+        url = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.xml"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             root = ET.fromstring(response.content)
-            namespaces = {'ns': 'http://ecb.int'}
+            namespaces = {'ns': 'http://www.ecb.int/vocabulary/2002-08-01/eurofxref'}
             
             for cube_time in root.findall('.//ns:Cube[@time]', namespaces):
                 date_str = cube_time.get('time')
@@ -210,7 +210,7 @@ def run_fifo_engine(df, cached_rates):
             shares_to_sell = shares
             
             while shares_to_sell > 0 and len(fifo_pools[ticker]) > 0:
-                oldest_lot = fifo_pools[ticker][0]  # Bezpečný výber prvého (najstaršieho) lotu v poli
+                oldest_lot = fifo_pools[ticker][0]  # FIX: Bezpečný a presný výber prvého lotu indexom
                 
                 if oldest_lot['shares'] <= shares_to_sell:
                     matched_shares = oldest_lot['shares']
@@ -252,4 +252,3 @@ def run_fifo_engine(df, cached_rates):
                     'Spoločnosť': name,
                     'Kusy': shares_to_sell,
                     'Dátum nákupu': 'Neznámy',
-                    'Dátum predaja': row_date.strftime('%Y-%m-%d'),
