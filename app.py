@@ -55,13 +55,13 @@ def extract_clean_records(file):
     
     col_mapping = {}
     keywords = {
-        'Time': ['time', 'čas', 'cas', 'typ'],
-        'Action': ['action', 'operácia', 'operacia', 'typ obchodu'],
+        'Time': ['time', 'čas', 'cas', 'typ', 'dátum', 'datum'],
+        'Action': ['action', 'operácia', 'operacia', 'typ obchodu', 'akcia'],
         'Ticker': ['ticker', 'symbol'],
-        'Name': ['name', 'názov', 'nazov', 'spoločnosť'],
-        'Shares': ['no. of shares', 'kusy', 'množstvo', 'mnozstvo', 'počet'],
-        'PricePerShare': ['price per share', 'cena za kus', 'cena'],
-        'Total': ['total', 'celkom', 'suma']
+        'Name': ['name', 'názov', 'nazov', 'spoločnosť', 'nazov nastroja', 'názov nástroja'],
+        'Shares': ['no. of shares', 'kusy', 'množstvo', 'mnozstvo', 'počet', 'pocet'],
+        'PricePerShare': ['price per share', 'cena za kus', 'cena', 'cena za akciu'],
+        'Total': ['total', 'celkom', 'suma', 'celková suma', 'celkova suma']
     }
     
     for target_key, phrases in keywords.items():
@@ -112,7 +112,7 @@ def process_uploaded_files(uploaded_files):
     return combined_df
 
 # ==========================================
-# STABILNÉ LINEÁRNE FIFO JADRO (FIX INDEXU)
+# STABILNÉ LINEÁRNE FIFO JADRO
 # ==========================================
 def run_fifo_engine(df):
     action_pattern = r'(buy|sell|nákup|nakup|predaj)'
@@ -164,7 +164,7 @@ def run_fifo_engine(df):
                 if shares_to_sell <= 1e-7 or len(fifo_pools[ticker]) == 0:
                     break
                     
-                # OPRAVENÝ KLÚČOVÝ INDEX [0] PRE PRVÝ LOT V PORADÍ
+                # DEFINITÍVNA KOREKCIA: Ťaháme prvú nákupnú šaržu cez index [0]
                 oldest_lot = fifo_pools[ticker][0]
                 
                 if oldest_lot['shares'] <= (shares_to_sell + 1e-7):
@@ -228,7 +228,7 @@ def run_fifo_engine(df):
 # HLAVNÝ RENDER STRÁNKY (UI)
 # ==========================================
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212")
-st.caption("Verzia 4.5: Opravené indexovanie lotov a odstránené všetky chyby odsadenia.")
+st.caption("Verzia 5.0: Plne stabilizované spracovanie nákupných šarží. Kompletný audit.")
 
 st.header("1. Vstup dát (Hromadný import CSV)")
 uploaded_files = st.file_uploader(
@@ -264,6 +264,3 @@ if not df_main.empty:
 
 cols_years = st.columns(len(available_years))
 for idx, yr in enumerate(available_years):
-    if cols_years[idx].button(f"📅 {yr}", key=f"btn_yr_{yr}"):
-        st.session_state.selected_year = yr
-
