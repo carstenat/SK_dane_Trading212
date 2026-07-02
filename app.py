@@ -28,7 +28,7 @@ else:
     """, unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií a ročné daňové podklady.")
+st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True, key="uploader_main_final")
 
@@ -37,126 +37,145 @@ if uploaded_files:
     for file in uploaded_files:
         zoznam_df.append(pd.read_csv(file))
         
-    df_global = pd.concat(zoznam_df, ignore_index=True)
-    df_global['Time'] = pd.to_datetime(df_global['Time'], errors='coerce').dt.tz_localize(None)
-    df_global = df_global.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
+    df = pd.concat(zoznam_df, ignore_index=True)
+    df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
+    df = df.dropna(subset=['Time', 'Ticker']).sort_values(by='Time').reset_index(drop=True)
     
-    df_global['No. of shares'] = pd.to_numeric(df_global['No. of shares'], errors='coerce').fillna(0.0)
-    df_global['Total'] = pd.to_numeric(df_global['Total'], errors='coerce').fillna(0.0)
-    df_global['Withholding tax'] = pd.to_numeric(df_global['Withholding tax'], errors='coerce').fillna(0.0)
-    df_global['Ticker_Clean'] = df_global['Ticker'].fillna('').astype(str).str.strip().str.upper()
-    df_global['Rok'] = df_global['Time'].dt.year
+    df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
+    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
+    df['Withholding tax'] = pd.to_numeric(df['Withholding tax'], errors='coerce').fillna(0.0)
+    df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
     
     databaza_mien = {}
-    for _, riadok in df_global.iterrows():
+    for _, riadok in df.iterrows():
         tick_c = str(riadok['Ticker_Clean'])
         full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
         if tick_c and tick_c != 'nan' and full_name and full_name != 'nan':
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
                 databaza_mien[tick_c] = full_name
 
-    # 📅 TRI ROČNÉ ZÁLOŽKY - PEVNÁ RUČNÁ ŠTRUKTÚRA BEZ RIZIKA CHÝB
-    tab2024, tab2025, tab2026 = st.tabs(["📅 Daňový rok 2024", "📅 Daňový rok 2025", "📅 Daňový rok 2026"])
-    dnes = datetime.now()
+    st.markdown("##")
+    st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     
-    # =========================================================================
-    # 📑 SEKCIA 1: DAŇOVÝ ROK 2024
-    # =========================================================================
-    with tab2024:
-        st.header("Optimalizátor a podklady pre rok 2024")
-        df_akcie_2024 = df_global[(df_global['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)) & (df_global['Rok'] <= 2024)].copy()
-        tickerov_2024 = sorted([x for x in df_akcie_2024['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
+    df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)].copy()
+    zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
+    
+    if zoznam_tickerov_all:
+        ponuka_pre_menu = []
+        mapovanie_tickerov = {}
+        for t in zoznam_tickerov_all:
+            full_company_name = databaza_mien.get(t, "Spoločnosť z platformy")
+            text_riadku = f"{t} - {full_company_name}"
+            ponuka_pre_menu.append(text_riadku)
+            mapovanie_tickerov[text_riadku] = t
+            
+        ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_final")
+        vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
-        if tickerov_2024:
-            ponuka_2024 = [f"{t} - {databaza_mien.get(t, 'Spoločnosť')}" for t in tickerov_2024]
-            vybrany_text_2024 = st.selectbox("Vyberte akciu zo svojho portfólia (2024):", ponuka_2024, key="sel_2024")
-            ticker_pure_2024 = vybrany_text_2024.split(" - ")[0]
+        col1, col2 = st.columns(2)
+        with col1:
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_final")
+        with col2:
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_final")
+        
+        df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
+        
+        sklad_aktualny = []
+        for _, riadok in df_ticker.iterrows():
+            typ = str(riadok['Action']).lower()
+            shares = float(riadok['No. of shares'])
+            total = float(riadok['Total'])
+            datum = riadok['Time']
             
-            c1_24, c2_24 = st.columns(2)
-            with c1_24:
-                vlastnene_24 = st.number_input("Počet kusov vlastnených na platforme (2024):", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="v_2024")
-            with c2_24:
-                cena_24 = st.number_input("Aktuálna trhová cena v EUR (2024):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="c_2024")
-                
-            df_ticker_24 = df_akcie_2024[df_akcie_2024['Ticker_Clean'] == ticker_pure_2024].sort_values(by='Time').reset_index(drop=True)
-            sklad_24 = []
-            for _, r in df_ticker_24.iterrows():
-                typ = str(r['Action']).lower()
-                shares = float(r['No. of shares'])
-                total = float(r['Total'])
-                if 'buy' in typ or 'nákup' in typ or 'nakup' in typ:
-                    if shares > 0.00001: sklad_24.append({'shares': shares, 'date': r['Time'], 'cena_za_kus': total/shares})
-                elif 'sell' in typ or 'predaj' in typ or shares < 0:
-                    pe = abs(shares)
-                    for b in sklad_24:
-                        if pe > 1e-6 and b['shares'] > 0:
-                            v = min(b['shares'], pe)
-                            b['shares'] -= v
-                            pe -= v
-                    sklad_24 = [x for x in sklad_24 if x['shares'] > 1e-6]
-                    
-            max_24 = sum([x['shares'] for x in sklad_24])
-            stav_24 = min(vlastnene_24, max_24)
-            if vlastnene_24 > max_24: st.error(f"⚠️ Maximálny dostupný sklad pre rok 2024 je {max_24:.5f} ks.")
+            if 'buy' in typ or 'nákup' in typ or 'nakup' in typ:
+                if shares > 0.00001:
+                    sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
+            elif 'sell' in typ or 'predaj' in typ or shares < 0:
+                predat_este = abs(shares)
+                for b in sklad_aktualny:
+                    if predat_este > 1e-6 and b['shares'] > 0:
+                        vziat = min(b['shares'], predat_este)
+                        b['shares'] -= vziat
+                        predat_este -= vziat
+                sklad_aktualny = [x for x in sklad_aktualny if x['shares'] > 1e-6]
+        
+        max_sklad_dostupny = sum([x['shares'] for x in sklad_aktualny])
+        
+        skutocny_stav = vstup_vlastnene
+        if vstup_vlastnene > max_sklad_dostupny:
+            st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade Trading 212 zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame na vaše reálne maximum.")
+            skutocny_stav = max_sklad_dostupny
             
-            p_ks_24 = stav_24
-            sb_24, mb_24, v_sb_24, v_mb_24 = 0.0, 0.0, 0.0, 0.0
-            txt_24, csv_24 = [], [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup", "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
+        potrebne_ks = skutocny_stav
+        dnes = datetime.now()
+        ks_bez_dane = 0.0
+        ks_mlade = 0.0
+        vydavok_safe_balika = 0.0
+        vydavok_mladeho_balika = 0.0
+        
+        rozpis_textov = []
+        export_csv_riadky = [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup", "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
+        
+        for n in sklad_aktualny:
+            if potrebne_ks < 1e-5:
+                break
+            vziat_ks = min(n['shares'], potrebne_ks)
+            potrebne_ks -= vziat_ks
             
-            for n in sklad_24:
-                if p_ks_24 < 1e-5: break
-                vk = min(n['shares'], p_ks_24)
-                p_ks_24 -= vk
-                vek = (dnes.date() - pd.to_datetime(n['date']).date()).days
-                cb = vk * n['cena_za_kus']
-                dn = pd.to_datetime(n['date']).strftime('%d.%m.%Y')
-                
-                if vek >= 365:
-                    sb_24 += vk
-                    v_sb_24 += cb
-                    txt_24.append(f"🟢 **BEZ DANE** | Nákup: {dn} | Množstvo: {vk:.5f} ks pri cene {n['cena_za_kus']:.2f} EUR (Spolu: {cb:.2f} EUR) | ⏳ Oslobodené")
-                    csv_24.append([dn, f"{vk:.5f}", f"{n['cena_za_kus']:.2f}", f"{cb:.2f}", "Bez dane", "Uz oslobodene", "0 dni"])
-                else:
-                    mb_24 += vk
-                    v_mb_24 += cb
-                    do = (pd.to_datetime(n['date']) + pd.Timedelta(days=365)).strftime('%d.%m.%Y')
-                    txt_24.append(f"🔴 **ZDAŇUJE SA** | Nákup: {dn} | Množstvo: {vk:.5f} ks pri cene {n['cena_za_kus']:.2f} EUR (Spolu: {cb:.2f} EUR) | ⏳ Čakať: {365-vek} dní (Oslobodenie: {do})")
-                    csv_24.append([dn, f"{vk:.5f}", f"{n['cena_za_kus']:.2f}", f"{cb:.2f}", "Zdanuje sa", do, f"{365-vek} dni"])
-                    
-            if stav_24 > 0:
-                st.markdown(f"**Vizuálny pomer safe pozície:** {sb_24:.5f} ks z {stav_24:.5f} ks")
-                st.progress(max(0.0, min(1.0, float(sb_24 / stav_24))))
-                
-                if cena_24 > 0:
-                    st.success(f"🔓 Predaj bez dane ihneď v 2024: **{sb_24:.5f} ks** | Hodnota: {sb_24*cena_24:.2f} € (Zisk: +{max(0.0, (sb_24*cena_24)-v_sb_24):.2f} €)")
-                else:
-                    st.success(f"🔓 Predaj bez dane ihneď v 2024: **{sb_24:.5f} ks**")
-                    
-                st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa v 2024): **{mb_24:.5f} ks**")
-                if mb_24 > 0 and cena_24 > 0:
-                    zm = max(0.0, (mb_24*cena_24)-v_mb_24)
-                    st.error(f"⚠️ **Daňový rozpis:** Krátkodobý zisk: `{zm:.2f} €` | Daň (19%): `{zm*0.19:.2f} €` | Odvody (14%): `{zm*0.14:.2f} €` | **Celkovo štátu: -{zm*0.33:.2f} €**")
-                
-                st.markdown("---")
-                st.subheader("📋 Detailný rozpis nákupných balíčkov (2024)")
-                csv_str_24 = "\n".join([",".join(row) for row in csv_24])
-                st.download_button(label="📥 STIAHNUŤ ROZPIS FRAKCIÍ ZA ROK 2024 (CSV)", data=csv_str_24.encode('utf-8'), file_name=f"t212_frakcie_{ticker_pure_2024}_2024.csv", mime="text/csv", key="btn_24")
-                for t in txt_24: st.write(t)
-                
-            # Dividendy 2024
-            st.markdown("##")
-            df_div_24 = df_global[(df_global['Action'].str.lower().str.contains('dividend|dividenda', na=False)) & (df_global['Rok'] == 2024) & (df_global['Ticker_Clean'] == ticker_pure_2024)].copy()
-            exp_div_24 = st.expander("💰 Zobraziť podklady pre Dividendy za daňový rok 2024")
-            if len(df_div_24) > 0:
-                tb, tt = 0.0, 0.0
-                for _, r in df_div_24.iterrows():
-                    b = float(r['Total']) + float(r['Withholding tax'])
-                    tb += b; tt += float(r['Withholding tax'])
-                    exp_div_24.write(f"📅 {pd.to_datetime(r['Time']).strftime('%d.%m.%Y')} | Brutto: {b:.2f} EUR | Daň v zahraničí: {r['Withholding tax']:.2f} EUR")
-                exp_div_24.write(f"**Celkový príjem Brutto (Riadok 1):** `{tb:.2f} EUR` | **Zaplatená daň v zahraničí:** `{tt:.2f} EUR`")
-            else: exp_div_24.info("V daňovom roku 2024 neboli nájdené žiadne dividendy pre túto akciu.")
+            nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
+            vek_dni = (dnes.date() - nakup_pure.date()).days
+            cena_balika = vziat_ks * n['cena_za_kus']
             
-        # Úroky 2024 (Striktne očistené zarovnanie)
-        df_ur_24 = df_global[(df_global['Action'].str.lower().str.contains('interest on cash|úrok|urok', na=False)) & (df_global['Rok'] == 2024)].copy()
-        exp_ur_24 = st.expander("💶 Zobraziť sumár Úrokov z neinvestovanej hotovosti za daňový rok 2024")
-        if len(df_ur_24) > 0:
+            d_nakupu = nakup_pure.strftime('%d.%m.%Y')
+            text_mnozstva = f"{vziat_ks:.5f} ks"
+            text_ceny = f"{n['cena_za_kus']:.2f} EUR/ks"
+            text_celkovo = f"Spolu: {cena_balika:.2f} EUR"
+            
+            if vek_dni >= 365:
+                ks_bez_dane += vziat_ks
+                vydavok_safe_balika += cena_balika
+                riadok_prehladu = f"🟢 **BEZ DANE** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Netreba čakať (Oslobodené)"
+                rozpis_textov.append(riadok_prehladu)
+                export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Bez dane", "Uz oslobodene", "0 dni"])
+            else:
+                ks_mlade += vziat_ks
+                vydavok_mladeho_balika += cena_balika
+                d_oslobodenia = (nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y')
+                zostava_dni = 365 - vek_dni
+                riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
+                rozpis_textov.append(riadok_prehladu)
+                export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Zdanuje sa", d_oslobodenia, f"{zostava_dni} dni"])
+        
+        ks_bez_dane = round(ks_bez_dane, 5)
+        ks_mlade = round(ks_mlade, 5)
+        
+        st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
+        vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
+        st.progress(max(0.0, min(1.0, vypocitany_pomer)))
+        
+        trhova_hodnota_safe = ks_bez_dane * aktualna_cena
+        cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
+        st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
+        
+        trhova_hodnota_mlade = ks_mlade * aktualna_cena
+        zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
+        dan_19 = round(zisk_mlade * 0.19, 2)
+        odvody_14 = round(zisk_mlade * 0.14, 2)
+        celkovy_vypal_statu = dan_19 + odvody_14
+        
+        st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
+        st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: `{zisk_mlade:.2f} EUR` | Daň z príjmu (19%): `{dan_19:.2f} EUR` | Zdravotné odvody (14%): `{odvody_14:.2f} EUR` | **Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR**")
+        
+        # =========================================================================
+        # 📋 ROZBALENÝ AKCIOVÝ BREAKDOWN (Zostáva natvrdo vybalený na ploche)
+        # =========================================================================
+        st.markdown("---")
+        st.subheader("📋 Detailný rozpis nákupných balíčkov (Frakcií)")
+        
+        csv_string = "\n".join([",".join(row) for row in export_csv_riadky])
+        st.download_button(label="📥 STIAHNUŤ TENTO ROZPIS FRAKCIÍ DO EXCELU (CSV)", data=csv_string.encode('utf-8'), file_name=f"t212_rozpis_frakcii_{vybrany_ticker_pure}.csv", mime="text/csv", key="btn_export_frakcii_v980")
+        
+        st.write("Chronologický prehľad balíčkov na sklade:")
+        for r_text in rozpis_textov:
+            st.write(r_text)
