@@ -183,7 +183,6 @@ if st.session_state.databaza_transakcii is not None:
                             'Zisk/Strata': zisk, 'Oslobodené': "Áno" if oslobodene else "Nie",
                             'Zdaniteľný Zisk': 0.0 if oslobodene else (zisk if zisk > 0 else 0.0)
                         })
-        # ⭐ LOCK ZMENY: Ukladáme úplne všetky loty, aj tie s nulovým zostatkom, aby sme videli prehľad histórie!
         otvorene_loty_portfolio[t] = nakupne_loty
 
     if len(realizovane_obchody_rok) == 0:
@@ -197,3 +196,5 @@ if st.session_state.databaza_transakcii is not None:
     col_m1, col_m2, col_m3 = st.columns(3)
     with col_m1: st.metric("Krátkodobý zdaniteľný zisk", f"{zdanitelny_zisk_celkom:,.2f} EUR")
     with col_m2: st.metric("Daň z príjmu (19%)", f"{zdanitelny_zisk_celkom * 0.19:,.2f} EUR")
+    with col_m3: st.metric("Zdravotné odvody (15%)", f"{zdanitelny_zisk_celkom * 0.15:,.2f} EUR")
+
