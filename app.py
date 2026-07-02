@@ -181,11 +181,10 @@ if uploaded_files:
             col_karta1, col_karta2 = st.columns(2)
             
             with col_karta1:
-                st.success(
-                    "### 🟢 Zelená karta úspechu (Oslobodené)\n\n"
-                    f"* **Trhová hodnota:** {trh_hodnota_safe:.2f} EUR\n"
-                    f"* **Čistý zisk bez dane:** {cisty_zisk_safe:.2f} EUR\n"
-                    f"* *Poznámka: Tieto akcie spĺňajú ročný časový test v SR.*"
-                )
+                txt_safe = "### 🟢 Zelená karta úspechu (Oslobodené)\n\n"
+                txt_safe += f"* **Trhová hodnota:** {trh_hodnota_safe:.2f} EUR\n"
+                txt_safe += f"* **Čistý zisk bez dane:** {cisty_zisk_safe:.2f} EUR\n"
+                txt_safe += "* *Poznámka: Tieto akcie spĺňajú ročný časový test v SR.*"
+                st.success(txt_safe)
                 
             with col_karta2:
