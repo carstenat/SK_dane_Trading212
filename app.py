@@ -102,76 +102,78 @@ if uploaded_files:
         
         max_sklad_dostupny = sum([x['shares'] for x in sklad_aktualny])
         
-        if vstup_vlastnene > 0:
-            if vstup_vlastnene > max_sklad_dostupny:
-                st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade Trading 212 zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame na vaše reálne maximum.")
-                skutocny_stav = max_sklad_dostupny
+        skutocny_stav = vstup_vlastnene
+        if vstup_vlastnene > max_sklad_dostupny:
+            st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade Trading 212 zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame na vaše reálne maximum.")
+            skutocny_stav = max_sklad_dostupny
+            
+        potrebne_ks = skutocny_stav
+        dnes = datetime.now()
+        ks_bez_dane = 0.0
+        ks_mlade = 0.0
+        vydavok_safe_balika = 0.0
+        vydavok_mladeho_balika = 0.0
+        
+        rozpis_textov = []
+        export_csv_riadky = [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup", "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
+        
+        for n in sklad_aktualny:
+            if potrebne_ks < 1e-5:
+                break
+            vziat_ks = min(n['shares'], predat_este_final := potrebne_ks)
+            potrebne_ks -= vziat_ks
+            
+            nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
+            vek_dni = (dnes.date() - nakup_pure.date()).days
+            cena_balika = vziat_ks * n['cena_za_kus']
+            
+            d_nakupu = nakup_pure.strftime('%d.%m.%Y')
+            text_mnozstva = f"{vziat_ks:.5f} ks"
+            text_ceny = f"{n['cena_za_kus']:.2f} EUR/ks"
+            text_celkovo = f"Spolu: {cena_balika:.2f} EUR"
+            
+            if vek_dni >= 365:
+                ks_bez_dane += vziat_ks
+                vydavok_safe_balika += cena_balika
+                riadok_prehladu = f"🟢 **BEZ DANE** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Netreba čakať (Oslobodené)"
+                rozpis_textov.append(riadok_prehladu)
+                export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Bez dane", "Uz oslobodene", "0 dni"])
             else:
-                skutocny_stav = vstup_vlastnene
-                
-            if skutocny_stav > 0:
-                potrebne_ks = skutocny_stav
-                dnes = datetime.now()
-                ks_bez_dane = 0.0
-                ks_mlade = 0.0
-                vydavok_safe_balika = 0.0
-                vydavok_mladeho_balika = 0.0
-                
-                rozpis_textov = []
-                export_csv_riadky = [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup", "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
-                
-                for n in sklad_aktualny:
-                    if potrebne_ks < 1e-5:
-                        break
-                    vziat_ks = min(n['shares'], potrebne_ks)
-                    potrebne_ks -= vziat_ks
-                    
-                    nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
-                    vek_dni = (dnes.date() - nakup_pure.date()).days
-                    cena_balika = vziat_ks * n['cena_za_kus']
-                    
-                    d_nakupu = nakup_pure.strftime('%d.%m.%Y')
-                    text_mnozstva = f"{vziat_ks:.5f} ks"
-                    text_ceny = f"{n['cena_za_kus']:.2f} EUR/ks"
-                    text_celkovo = f"Spolu: {cena_balika:.2f} EUR"
-                    
-                    if vek_dni >= 365:
-                        ks_bez_dane += vziat_ks
-                        vydavok_safe_balika += cena_balika
-                        riadok_prehladu = f"🟢 **BEZ DANE** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Netreba čakať (Oslobodené)"
-                        rozpis_textov.append(riadok_prehladu)
-                        export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Bez dane", "Uz oslobodene", "0 dni"])
-                    else:
-                        ks_mlade += vziat_ks
-                        vydavok_mladeho_balika += cena_balika
-                        d_oslobodenia = (nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y')
-                        zostava_dni = 365 - vek_dni
-                        riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
-                        rozpis_textov.append(riadok_prehladu)
-                        export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Zdanuje sa", d_oslobodenia, f"{zostava_dni} dni"])
-                
-                ks_bez_dane = round(ks_bez_dane, 5)
-                ks_mlade = round(ks_mlade, 5)
-                
-                # Vykreslenie synchronizovaného textu a progress baru na reálny očistený stav
-                st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
-                vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
-                st.progress(max(0.0, min(1.0, vypocitany_pomer)))
-                
-                # 🔓 ZELENÁ KARTA - Surový textový výpis na ploche
-                if aktualna_cena > 0:
-                    trhova_hodnota_safe = ks_bez_dane * aktualna_cena
-                    cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
-                    st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
-                else:
-                    st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks**")
-                
-                # 🔓 ORANŽOVO-ŽLTÁ KARTA - ABSOLÚTNE LINEÁRNA, PLOCHÁ STRUKTÚRA BEZ VNÚTORNÝCH BLOKOV
-                trhova_hodnota_mlade = ks_mlade * aktualna_cena
-                zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
-                dan_19 = round(zisk_mlade * 0.19, 2)
-                odvody_14 = round(zisk_mlade * 0.14, 2)
-                celkovy_vypal_statu = dan_19 + odvody_14
-                
-                # Žltá karta svieti VŽDY a bezpečne reaguje na zadanú cenu
-                st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): **{ks_mlade:.5f} ks**")
+                ks_mlade += vziat_ks
+                vydavok_mladeho_balika += cena_balika
+                d_oslobodenia = (nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y')
+                zostava_dni = 365 - vek_dni
+                riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
+                rozpis_textov.append(riadok_prehladu)
+                export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Zdanuje sa", d_oslobodenia, f"{zostava_dni} dni"])
+        
+        ks_bez_dane = round(ks_bez_dane, 5)
+        ks_mlade = round(ks_mlade, 5)
+        
+        # Vykreslenie vizuálneho stavu na ploche aplikácie
+        st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
+        vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
+        st.progress(max(0.0, min(1.0, vypocitany_pomer)))
+        
+        # 🔓 ZELENÁ KARTA - Zobrazí sa vždy, ak sú zadané kusy
+        if vstup_vlastnene > 0:
+            trhova_hodnota_safe = ks_bez_dane * aktualna_cena
+            cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
+            st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
+            
+        # 🔓 ORANŽOVO-ŽLTÁ VÝSTRAHA - Zobrazí sa vždy na ploche, ak sú mladé kusy
+        if ks_mlade > 0:
+            st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): **{ks_mlade:.5f} ks**")
+            trhova_hodnota_mlade = ks_mlade * aktualna_cena
+            zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
+            dan_19 = round(zisk_mlade * 0.19, 2)
+            odvody_14 = round(zisk_mlade * 0.14, 2)
+            celkovy_vypal_statu = dan_19 + odvody_14
+            st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: `{zisk_mlade:.2f} EUR` | Daň z príjmu (19%): `{dan_19:.2f} EUR` | Zdravotné odvody (14%): `{odvody_14:.2f} EUR` | **Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR**")
+            
+        # =========================================================================
+        # 🛡️ GLOBALNE SVIETIACE EXPANDERY (ÚPLNE ODDELENÉ NA MAXIMUM - NIKDY NEZMIZNÚ)
+        # =========================================================================
+        st.markdown("##")
+        
+        expander_frakcii = st.expander("📋 Zobraziť detailný rozpis nákupných balíčkov (Frakcií)")
