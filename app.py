@@ -167,9 +167,6 @@ if uploaded_files:
         st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
         st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: `{zisk_mlade:.2f} EUR` | Daň z príjmu (19%): `{dan_19:.2f} EUR` | Zdravotné odvody (14%): `{odvody_14:.2f} EUR` | **Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR**")
         
-        # =========================================================================
-        # 📋 NATVRDO VYBALENÝ ROZPIS FRAKCIÍ S PRIAMYM TLAČIDLOM (BEZ DROPDOWNU)
-        # =========================================================================
         st.markdown("---")
         st.subheader("📋 Detailný rozpis nákupných balíčkov (Frakcií)")
         
@@ -180,3 +177,7 @@ if uploaded_files:
         for r_text in rozpis_textov:
             st.write(r_text)
             
+        # =========================================================================
+        # 💰 100% IZOLOVANÁ A ZABALENÁ SEKCIA PRE DIVIDENDY (OCHRANNÝ ŠTÍT)
+        # =========================================================================
+        try:
