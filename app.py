@@ -162,7 +162,7 @@ if st.session_state.databaza_transakcii is not None:
     realizovane_obchody_rok = []
     otvorene_loty_portfolio = {}
 
-    # FLATTENED ENGINE: Plochá a stabilná štruktúra cyklov
+    # FLATTENED ENGINE: Plochá a stabilná štruktúra cyklov (Garancia proti IndentationError)
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
         nakupne_loty = []
@@ -193,4 +193,3 @@ if st.session_state.databaza_transakcii is not None:
                         aktualny_lot['množstvo'] -= odpredane_množstvo
                         množstvo_na_predaj = 0
                         
-                    prijem = odpredane_množstvo * cena_ks
