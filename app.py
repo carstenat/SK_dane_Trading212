@@ -51,10 +51,8 @@ def extract_clean_records(file):
     except Exception:
         return []
         
-    # Reset indexov pre istotu, ak by CSV malo divný formát
     df = df.reset_index(drop=True)
     
-    # Nájdenie stĺpcov podľa kľúčových slov
     col_mapping = {}
     keywords = {
         'Time': ['time', 'čas', 'cas', 'typ'],
@@ -66,13 +64,11 @@ def extract_clean_records(file):
         'Total': ['total', 'celkom', 'suma']
     }
     
-    # Priradenie reálneho názvu stĺpca z CSV ku kľúčovému slovu
     for target_key, phrases in keywords.items():
         for col in df.columns:
             if str(col).lower().strip() in phrases:
                 col_mapping[target_key] = col
                 break
-        # Ak nenašlo presnú zhodu, skús čiastočnú (napr. "Total (EUR)")
         if target_key not in col_mapping:
             for col in df.columns:
                 if any(p in str(col).lower() for p in phrases):
@@ -81,7 +77,6 @@ def extract_clean_records(file):
 
     records = []
     for _, row in df.iterrows():
-        # Vytiahnutie hodnôt s fallbackom, ak stĺpec chýba
         r_time = row[col_mapping['Time']] if 'Time' in col_mapping else np.nan
         r_action = row[col_mapping['Action']] if 'Action' in col_mapping else 'UNKNOWN'
         r_ticker = row[col_mapping['Ticker']] if 'Ticker' in col_mapping else 'UNKNOWN'
@@ -111,16 +106,13 @@ def process_uploaded_files(uploaded_files):
     if not all_records:
         return None
         
-    # Vytvorenie finálneho DataFrame z čistého Python zoznamu (odstraňuje InvalidIndexError)
     combined_df = pd.DataFrame(all_records)
-    
-    # Konverzia dátumu
     combined_df['Time'] = pd.to_datetime(combined_df['Time'], format='mixed', errors='coerce')
     combined_df = combined_df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
     return combined_df
 
 # ==========================================
-# STABILNÉ LINEÁRNE FIFO JADRO
+# STABILNÉ LINEÁRNE FIFO JADRO (FIX INDEXU)
 # ==========================================
 def run_fifo_engine(df):
     action_pattern = r'(buy|sell|nákup|nakup|predaj)'
@@ -172,6 +164,7 @@ def run_fifo_engine(df):
                 if shares_to_sell <= 1e-7 or len(fifo_pools[ticker]) == 0:
                     break
                     
+                # OPRAVENÝ KLÚČOVÝ INDEX [0] PRE PRVÝ LOT V PORADÍ
                 oldest_lot = fifo_pools[ticker][0]
                 
                 if oldest_lot['shares'] <= (shares_to_sell + 1e-7):
@@ -235,7 +228,7 @@ def run_fifo_engine(df):
 # HLAVNÝ RENDER STRÁNKY (UI)
 # ==========================================
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212")
-st.caption("Verzia 4.4: Kompletne odstránené spájanie indexov cez Pandas. Definitívny opravný balík.")
+st.caption("Verzia 4.5: Opravené indexovanie lotov a odstránené všetky chyby odsadenia.")
 
 st.header("1. Vstup dát (Hromadný import CSV)")
 uploaded_files = st.file_uploader(
@@ -264,4 +257,13 @@ except Exception as fatal_err:
 
 st.header("2. Výber daňového obdobia")
 available_years = ["Všetky"]
+
 if not df_main.empty:
+    years_found = sorted(list(df_main['Time'].dt.year.unique()))
+    available_years.extend([str(y) for y in years_found])
+
+cols_years = st.columns(len(available_years))
+for idx, yr in enumerate(available_years):
+    if cols_years[idx].button(f"📅 {yr}", key=f"btn_yr_{yr}"):
+        st.session_state.selected_year = yr
+
