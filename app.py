@@ -47,14 +47,6 @@ if uploaded_files:
     df_global['Ticker_Clean'] = df_global['Ticker'].fillna('').astype(str).str.strip().str.upper()
     df_global['Rok'] = df_global['Time'].dt.year
     
-    # 📅 PREPÍNAČ ROKOV PRE ROČNÉ DAŇOVÉ PODKLADY
-    st.markdown("---")
-    st.header("📅 Výber daňového obdobia (Roku)")
-    dostupne_roky = sorted([int(x) for x in df_global['Rok'].unique() if pd.notna(x)])
-    if not dostupne_roky:
-        dostupne_roky = [2024, 2025, 2026]
-    vybrany_rok = st.radio("Zvoľte rok, za ktorý chcete zobraziť podklady pre dividendy a úroky z hotovosti:", dostupne_roky, horizontal=True, key="radio_rok_v2")
-    
     databaza_mien = {}
     for _, riadok in df_global.iterrows():
         tick_c = str(riadok['Ticker_Clean'])
@@ -63,117 +55,116 @@ if uploaded_files:
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
                 databaza_mien[tick_c] = full_name
 
-    st.markdown("---")
-    st.header("🔍 Daňový Optimalizátor pozície (Globálna história skladu)")
+    # 📅 VYTVORENIE TROCH SAMOSTATNÝCH DAŇOVÝCH ZÁLOŽIEK
+    tab2024, tab2025, tab2026 = st.tabs(["📅 Daňový rok 2024", "📅 Daňový rok 2025", "📅 Daňový rok 2026"])
     
-    df_akcie = df_global[df_global['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)].copy()
-    zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
+    # Zoznam rokov na spárovanie so záložkami
+    roky_zoznam = [2024, 2025, 2026]
+    tabs_zoznam = [tab2024, tab2025, tab2026]
     
-    if zoznam_tickerov_all:
-        ponuka_pre_menu = []
-        mapovanie_tickerov = {}
-        for t in zoznam_tickerov_all:
-            full_company_name = databaza_mien.get(t, "Spoločnosť z platformy")
-            text_riadku = f"{t} - {full_company_name}"
-            ponuka_pre_menu.append(text_riadku)
-            mapovanie_tickerov[text_riadku] = t
+    for i in range(3):
+        r_rok = roky_zoznam[i]
+        r_tab = tabs_zoznam[i]
+        
+        with r_tab:
+            st.header(f"🔍 Optimalizátor a podklady pre rok {r_rok}")
             
-        ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_final")
-        vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_final")
-        with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_final")
-        
-        # 🚀 FIFO POČÍTA SKLAD CEZ CELÚ GLOBÁLNU HISTÓRIU (Bez orezania rokmi)
-        df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
-        
-        sklad_aktualny = []
-        for _, riadok in df_ticker.iterrows():
-            typ = str(riadok['Action']).lower()
-            shares = float(riadok['No. of shares'])
-            total = float(riadok['Total'])
-            datum = riadok['Time']
+            # Filtrujeme akcie, ktoré mali transakciu do konca zvoleného daňového roka
+            df_akcie = df_global[(df_global['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)) & (df_global['Rok'] <= r_rok)].copy()
+            zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
             
-            if 'buy' in typ or 'nákup' in typ or 'nakup' in typ:
-                if shares > 0.00001:
-                    sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
-            elif 'sell' in typ or 'predaj' in typ or shares < 0:
-                predat_este = abs(shares)
-                for b in sklad_aktualny:
-                    if predat_este > 1e-6 and b['shares'] > 0:
-                        vziat = min(b['shares'], predat_este)
-                        b['shares'] -= vziat
-                        predat_este -= vziat
-                sklad_aktualny = [x for x in sklad_aktualny if x['shares'] > 1e-6]
-        
-        max_sklad_dostupny = sum([x['shares'] for x in sklad_aktualny])
-        
-        skutocny_stav = vstup_vlastnene
-        if vstup_vlastnene > max_sklad_dostupny:
-            st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade Trading 212 zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame na vaše reálne maximum.")
-            skutocny_stav = max_sklad_dostupny
-            
-        potrebne_ks = skutocny_stav
-        dnes = datetime.now()
-        ks_bez_dane = 0.0
-        ks_mlade = 0.0
-        vydavok_safe_balika = 0.0
-        vydavok_mladeho_balika = 0.0
-        
-        rozpis_textov = []
-        export_csv_riadky = [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup", "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
-        
-        for n in sklad_aktualny:
-            if potrebné_ks_pure_check := (potrebne_ks < 1e-5):
-                break
-            vziat_ks = min(n['shares'], potrebne_ks)
-            potrebne_ks -= vziat_ks
-            
-            nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
-            vek_dni = (dnes.date() - nakup_pure.date()).days
-            cena_balika = vziat_ks * n['cena_za_kus']
-            
-            d_nakupu = nakup_pure.strftime('%d.%m.%Y')
-            text_mnozstva = f"{vziat_ks:.5f} ks"
-            text_ceny = f"{n['cena_za_kus']:.2f} EUR/ks"
-            text_celkovo = f"Spolu: {cena_balika:.2f} EUR"
-            
-            if vek_dni >= 365:
-                ks_bez_dane += vziat_ks
-                vydavok_safe_balika += cena_balika
-                riadok_prehladu = f"🟢 **BEZ DANE** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Netreba čakať (Oslobodené)"
-                rozpis_textov.append(riadok_prehladu)
-                export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Bez dane", "Uz oslobodene", "0 dni"])
-            else:
-                ks_mlade += vziat_ks
-                vydavok_mladeho_balika += cena_balika
-                d_oslobodenia = (nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y')
-                zostava_dni = 365 - vek_dni
-                riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
-                rozpis_textov.append(riadok_prehladu)
-                export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Zdanuje sa", d_oslobodenia, f"{zostava_dni} dni"])
-        
-        ks_bez_dane = round(ks_bez_dane, 5)
-        ks_mlade = round(ks_mlade, 5)
-        
-        st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
-        vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
-        st.progress(max(0.0, min(1.0, vypocitany_pomer)))
-        
-        trhova_hodnota_safe = ks_bez_dane * aktualna_cena
-        cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
-        st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
-        
-        trhova_hodnota_mlade = ks_mlade * aktualna_cena
-        zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
-        dan_19 = round(zisk_mlade * 0.19, 2)
-        odvody_14 = round(zisk_mlade * 0.14, 2)
-        celkovy_vypal_statu = dan_19 + odvody_14
-        
-        st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
-        st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: `{zisk_mlade:.2f} EUR` | Daň z príjmu (19%): `{dan_19:.2f} EUR` | Zdravotné odvody (14%): `{odvody_14:.2f} EUR` | **Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR**")
-        
+            if zoznam_tickerov_all:
+                ponuka_pre_menu = []
+                mapovanie_tickerov = {}
+                for t in zoznam_tickerov_all:
+                    full_company_name = databaza_mien.get(t, "Spoločnosť z platformy")
+                    text_riadku = f"{t} - {full_company_name}"
+                    ponuka_pre_menu.append(text_riadku)
+                    mapovanie_tickerov[text_riadku] = t
+                    
+                ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
+                vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key=f"sel_linearna_{r_rok}")
+                vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key=f"vstup_stav_{r_rok}")
+                with col2:
+                    aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key=f"vstup_cena_{r_rok}")
+                
+                df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
+                
+                sklad_aktualny = []
+                for _, riadok in df_ticker.iterrows():
+                    typ = str(riadok['Action']).lower()
+                    shares = float(riadok['No. of shares'])
+                    total = float(riadok['Total'])
+                    datum = riadok['Time']
+                    
+                    if 'buy' in typ or 'nákup' in typ or 'nakup' in typ:
+                        if shares > 0.00001:
+                            sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
+                    elif 'sell' in typ or 'predaj' in typ or shares < 0:
+                        predat_este = abs(shares)
+                        for b in sklad_aktualny:
+                            if predat_este > 1e-6 and b['shares'] > 0:
+                                vziat = min(b['shares'], predat_este)
+                                b['shares'] -= vziat
+                                predat_este -= vziat
+                        sklad_aktualny = [x for x in sklad_aktualny if x['shares'] > 1e-6]
+                
+                max_sklad_dostupny = sum([x['shares'] for x in sklad_aktualny])
+                
+                skutocny_stav = vstup_vlastnene
+                if vstup_vlastnene > max_sklad_dostupny:
+                    st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade v roku {r_rok} zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Orezávame na maximum.")
+                    skutocny_stav = max_sklad_dostupny
+                    
+                if skutocny_stav > 0:
+                    potrebne_ks = skutocny_stav
+                    dnes = datetime.now()
+                    ks_bez_dane = 0.0
+                    ks_mlade = 0.0
+                    vydavok_safe_balika = 0.0
+                    vydavok_mladeho_balika = 0.0
+                    
+                    rozpis_textov = []
+                    export_csv_riadky = [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup", "Danovy stav", "Datum oslobodenia", "Zostava cakat"]]
+                    
+                    for n in sklad_aktualny:
+                        if potrebne_ks < 1e-5:
+                            break
+                        vziat_ks = min(n['shares'], potrebne_ks)
+                        potrebne_ks -= vziat_ks
+                        
+                        nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
+                        vek_dni = (dnes.date() - nakup_pure.date()).days
+                        cena_balika = vziat_ks * n['cena_za_kus']
+                        
+                        d_nakupu = nakup_pure.strftime('%d.%m.%Y')
+                        text_mnozstva = f"{vziat_ks:.5f} ks"
+                        text_ceny = f"{n['cena_za_kus']:.2f} EUR/ks"
+                        text_celkovo = f"Spolu: {cena_balika:.2f} EUR"
+                        
+                        if vek_dni >= 365:
+                            ks_bez_dane += vziat_ks
+                            vydavok_safe_balika += cena_balika
+                            riadok_prehladu = f"🟢 **BEZ DANE** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Netreba čakať (Oslobodené)"
+                            rozpis_textov.append(riadok_prehladu)
+                            export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Bez dane", "Uz oslobodene", "0 dni"])
+                        else:
+                            ks_mlade += vziat_ks
+                            vydavok_mladeho_balika += cena_balika
+                            d_oslobodenia = (nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y')
+                            zostava_dni = 365 - vek_dni
+                            riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
+                            rozpis_textov.append(riadok_prehladu)
+                            export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Zdanuje sa", d_oslobodenia, f"{zostava_dni} dni"])
+                    
+                    ks_bez_dane = round(ks_bez_dane, 5)
+                    ks_mlade = round(ks_mlade, 5)
+                    
+                    st.markdown(f"**Vizuálny pomer safe pozície pre rok {r_rok}:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
+                    vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
+                    st.progress(max(0.0, min(1.0, vypocitany_pomer)))
+                    
