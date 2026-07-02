@@ -195,3 +195,4 @@ if st.session_state.databaza_transakcii is not None:
                         množstvo_na_predaj -= odpredane_množstvo
                         nakupne_loty.pop(0)
                     else:
+
