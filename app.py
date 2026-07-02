@@ -28,7 +28,7 @@ else:
     """, unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny Nástroj na kontrolu časového testu pred predajom akcií.")
+st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
 
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True, key="uploader_main_final")
 
@@ -182,6 +182,6 @@ if uploaded_files:
             
             col_karta1, col_karta2 = st.columns(2)
             
-            # Bezpečné generovanie textov bez použitia citlivých triple-quoted f-stringov v HTML/Markdown kontajneri
             with col_karta1:
                 st.success(
+                    "### 🟢 Zelená karta úspechu (Oslobodené)\n\n"
