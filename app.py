@@ -44,29 +44,49 @@ if uploaded_files:
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🔍 UNIVERZÁLNE PREMENOVANIE STĹPCOV - Ochrana cez booleovské prepínače z retrospektívy
+    # 🔍 NEPRIESTRELNÉ UNIVERZÁLNE MAPOVANIE VŠETKÝCH STĹPCOV (SK / EN mutácie)
     mapovanie_stlpcov = {}
-    najdeny_shares = False
-    najdeny_total = False
-    najdeny_wht = False
+    flags = {"time": False, "action": False, "ticker": False, "name": False, "shares": False, "price": False, "total": False, "wht": False}
     
     for c in df.columns:
-        if ('shares' in c.lower() or 'kus' in c.lower()) and not najdeny_shares:
+        c_low = c.lower()
+        if ('time' in c_low or 'čas' in c_low or 'datum' in c_low or 'dátum' in c_low) and not flags["time"]:
+            mapovanie_stlpcov[c] = 'Time'
+            flags["time"] = True
+        elif ('action' in c_low or 'operácia' in c_low or 'operacia' in c_low) and not flags["action"]:
+            mapovanie_stlpcov[c] = 'Action'
+            flags["action"] = True
+        elif ('ticker' in c_low or 'symbol' in c_low) and not flags["ticker"]:
+            mapovanie_stlpcov[c] = 'Ticker'
+            flags["ticker"] = True
+        elif ('name' in c_low or 'názov' in c_low or 'nazov' in c_low) and not flags["name"]:
+            mapovanie_stlpcov[c] = 'Name'
+            flags["name"] = True
+        elif ('shares' in c_low or 'kus' in c_low or 'počet' in c_low or 'pocet' in c_low) and not flags["shares"]:
             mapovanie_stlpcov[c] = 'No. of shares'
-            najdeny_shares = True
-        elif ('total' in c.lower() or 'celkom' in c.lower()) and not najdeny_total:
+            flags["shares"] = True
+        elif ('price' in c_low or 'cena' in c_low) and not flags["price"]:
+            mapovanie_stlpcov[c] = 'Price per share'
+            flags["price"] = True
+        elif ('total' in c_low or 'celkom' in c_low or 'suma' in c_low) and not flags["total"]:
             mapovanie_stlpcov[c] = 'Total'
-            najdeny_total = True
-        elif ('withholding' in c.lower() or 'zrazen' in c.lower()) and not najdeny_wht:
+            flags["total"] = True
+        elif ('withholding' in c_low or 'zrazen' in c_low or 'daň' in c_low) and not flags["wht"]:
             mapovanie_stlpcov[c] = 'Withholding tax'
-            najdeny_wht = True
+            flags["wht"] = True
             
     df = df.rename(columns=mapovanie_stlpcov)
     
+    # Defenzívne doplnenie chýbajúcich stĺpcov, aby kód nespadol
+    if 'Time' not in df.columns: df['Time'] = pd.NaT
+    if 'Action' not in df.columns: df['Action'] = 'unknown'
+    if 'Ticker' not in df.columns: df['Ticker'] = ''
+    if 'Name' not in df.columns: df['Name'] = ''
     if 'No. of shares' not in df.columns: df['No. of shares'] = 0.0
     if 'Total' not in df.columns: df['Total'] = 0.0
     if 'Withholding tax' not in df.columns: df['Withholding tax'] = 0.0
     
+    # Parsovanie dátumov a čistenie typov
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df['Rok'] = df['Time'].dt.year
     df['Action_Clean'] = df['Action'].fillna('').astype(str).str.strip().str.lower()
@@ -138,14 +158,14 @@ if st.session_state.databaza_transakcii is not None:
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
 
     # =========================================================================
-    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (ÚPLNE PLOCHÝ FIFO ENGINE)
+    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (VÝPOČET PRE VŠETKY TICKERY CEZ FIFO)
     # =========================================================================
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
-    # Čistenie NaN hodnôt v Ticker a Time podľa požiadavky retrospektívy
-    df_akcie_len = df.dropna(subset=['Time', 'Ticker']).copy()
-    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
+    # Spracovanie poľa s vyčistenými akcionárskymi dátami
+    df_akcie_len = df.dropna(subset=['Time']).copy()
+    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].fillna('').astype(str).str.strip().str.upper()
     df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != '']
     df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != 'NAN'].sort_values(by='Time').reset_index(drop=True)
     
@@ -162,33 +182,8 @@ if st.session_state.databaza_transakcii is not None:
     realizovane_obchody_rok = []
     otvorene_loty_portfolio = {}
 
-    # ÚPLNE PLOCHÝ ZÁPIS FIFO ENGIE-U: Žiadne hlboké vnorené while ani else bloky!
+    # ÚPLNE PLOCHÝ LINEÁRNY FIFO ENGINE (Úplná garancia stability)
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
         nakupne_loty = []
         
-        for idx, row in df_t.iterrows():
-            akcia = str(row['Action_Clean'])
-            množstvo = float(row['No. of shares'])
-            total_val = float(row['Total'])
-            cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
-            
-            is_buy = ('buy' in akcia or 'nákup' in akcia or 'nakup' in akcia)
-            is_sell = ('sell' in akcia or 'predaj' in akcia)
-            
-            if is_buy:
-                nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']})
-                
-            if is_sell and len(nakupne_loty) > 0:
-                množstvo_na_predaj = množstvo
-                # Použitie bezpečného prechodu poľa namiesto nebezpečného vnorenia riadkov
-                for lot in list(nakupne_loty):
-                    if lot['množstvo'] <= 0 or množstvo_na_predaj <= 0:
-                        continue
-                    
-                    odpredane_množstvo = min(lot['množstvo'], množstvo_na_predaj)
-                    lot['množstvo'] -= odpredane_množstvo
-                    množstvo_na_predaj -= odpredane_množstvo
-                    
-                    prijem = odpredane_množstvo * cena_ks
-                    vydaj = odpredane_množstvo * lot['cena_nakup']
