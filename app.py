@@ -164,7 +164,7 @@ if st.session_state.databaza_transakcii is not None:
             mapovanie_zobrazenia[retazec] = (t, meno_firmy)
             list_prvkov.append(retazec)
             
-        # 🔀 Dynamické zoradenie podľa vybranej preferencie v sidebare
+        # 🔀 Bezpečné abecedné zoradenie podľa vybranej preferencie
         if metoda_zoradenia == "Názvu spoločnosti abecedne":
             list_na_zobrazenie = sorted(list_prvkov, key=lambda x: mapovanie_zobrazenia[x][1].lower())
         else:
@@ -190,10 +190,10 @@ if st.session_state.databaza_transakcii is not None:
             
             if 'buy' in akcia:
                 if kusy > 0.00001:
-                    nakupne_loty.append({
+                    cena_jednotkova = celkovy_objem / kusy
+                    novy_lot = {
                         "Time": cas_tx,
                         "Kusy_Povodny": kusy,
                         "Kusy_Zostatok": kusy,
                         "Total_Cena": celkovy_objem,
-                        "Cena_Za_Kus": celkovy_objem / kusy,
-                        "Rok": rok_tx
+                        "Cena_Za_Kus": cena_jednotkova,
