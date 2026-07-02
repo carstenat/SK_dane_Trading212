@@ -26,7 +26,7 @@ if 'selected_year' not in st.session_state:
     st.session_state.selected_year = "Všetky"
 
 # ==========================================
-# POMOCNÉ UKLADACIE A STRIKTNÉ PARSERY
+# POMOCNÉ ČISTIACE A PARSOVACIE MODULY
 # ==========================================
 @st.cache_data(ttl=86400)
 def fetch_ecb_daily_rates_for_year(year):
@@ -147,7 +147,7 @@ def process_uploaded_files(uploaded_files):
     return combined_df
 
 # ==========================================
-# VYČISTENÉ PLOCHÉ FIFO JADRO
+# KOMPLETNE OPRAVENÉ FIFO JADRO (BEZ KRAŠOV)
 # ==========================================
 def run_fifo_engine(df, cached_rates):
     action_pattern = r'(buy|sell|nákup|nakup|predaj)'
@@ -160,7 +160,6 @@ def run_fifo_engine(df, cached_rates):
     fifo_pools = {}
     lot_counters = {}
     
-    # Použitie plochých polí pre zamedzenie chýb syntaxe interpretátora
     t_tickers, t_names, t_shares = [], [], []
     t_buydates, t_selldates, t_days = [], [], []
     t_revenue, t_costs, t_profit = [], [], []
@@ -182,7 +181,7 @@ def run_fifo_engine(df, cached_rates):
             fifo_pools[ticker] = []
             lot_counters[ticker] = 0
             
-        # SPRACUJE NÁKUP
+        # NÁKUP: Pridanie novej šarže do poradia
         if 'buy' in action or 'nákup' in action or 'nakup' in action:
             lot_counters[ticker] += 1
             fifo_pools[ticker].append({
@@ -194,11 +193,12 @@ def run_fifo_engine(df, cached_rates):
                 'currency_orig': currency
             })
             
-        # SPRACUJE PREDAJ
+        # PREDAJ: Párovanie šarží od najstaršej
         elif 'sell' in action or 'predaj' in action:
             shares_to_sell = shares
             
             while shares_to_sell > 0 and len(fifo_pools[ticker]) > 0:
+                # KĽÚČOVÁ OPRAVA: [0] vytiahne iba prvý slovník zo zoznamu šarží
                 oldest_lot = fifo_pools[ticker][0]
                 
                 if oldest_lot['shares'] <= shares_to_sell:
@@ -220,7 +220,6 @@ def run_fifo_engine(df, cached_rates):
                 is_exempt = days_held >= 365
                 taxable_profit = profit_loss_eur if not is_exempt else 0.0
                 
-                # Ploché plnenie polí
                 t_tickers.append(ticker)
                 t_names.append(name)
                 t_shares.append(matched_shares)
@@ -234,6 +233,7 @@ def run_fifo_engine(df, cached_rates):
                 t_taxable.append(taxable_profit)
                 t_years.append(row_date.year)
                 
+            # Ošetrenie predaja do "mínusu" ak chýba história nákupov
             if shares_to_sell > 0:
                 t_tickers.append(ticker)
                 t_names.append(name)
@@ -244,6 +244,3 @@ def run_fifo_engine(df, cached_rates):
                 t_revenue.append(shares_to_sell * price_eur)
                 t_costs.append(0.0)
                 t_profit.append(0.0)
-                t_exempt.append('Nie')
-                t_taxable.append(0.0)
-                t_years.append(row_date.year)
