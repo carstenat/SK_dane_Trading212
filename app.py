@@ -11,20 +11,9 @@ st.sidebar.header("⚙️ Nastavenia vzhľadu")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
 
 if dark_mode:
-    st.markdown("""
-        <style>
-        .stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; }
-        h1, h2, h3, label, p, span { color: #FFFFFF !important; }
-        div[data-testid="stMetric"] { background-color: #1E293B !important; border: 2px solid #475569 !important; border-radius: 12px !important; padding: 14px 18px !important; }
-        </style>
-    """, unsafe_allow_html=True)
+    st.markdown("<style>.stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; } h1, h2, h3, label, p, span { color: #FFFFFF !important; } div[data-testid='stMetric'] { background-color: #1E293B !important; border: 2px solid #475569 !important; border-radius: 12px !important; padding: 14px 18px !important; }</style>", unsafe_allow_html=True)
 else:
-    st.markdown("""
-        <style>
-        .stApp { background-color: #FFFFFF !important; color: #1E293B !important; }
-        h1, h2 { color: #0F172A !important; }
-        div[data-testid="stMetric"] { background-color: #F8FAFC !important; border: 2px solid #CBD5E1 !important; border-radius: 12px !important; padding: 14px 18px !important; }
-        </style>    """, unsafe_allow_html=True)
+    st.markdown("<style>.stApp { background-color: #FFFFFF !important; color: #1E293B !important; } h1, h2 { color: #0F172A !important; } div[data-testid='stMetric'] { background-color: #F8FAFC !important; border: 2px solid #CBD5E1 !important; border-radius: 12px !important; padding: 14px 18px !important; }</style>", unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
 st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
@@ -186,4 +175,6 @@ if uploaded_files:
                     rozpis_textov.append(riadok_prehladu)
                     zoznam_riadkov_exportu.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Bez dane", "Uz oslobodene", "0", f"{aktualna_hodnota_balika:.2f}", f"{zisk_balika:.2f}"])
                 else:
+                    ks_mlade += vziat_ks
+                    vydavok_mladeho_balika += cena_balika
 
