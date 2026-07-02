@@ -19,6 +19,7 @@ st.set_page_config(
     layout="wide"
 )
 
+# Inicializácia Session State proti resetom komponentov
 if 'df_raw' not in st.session_state:
     st.session_state.df_raw = None
 if 'selected_year' not in st.session_state:
@@ -144,7 +145,7 @@ def process_uploaded_files(uploaded_files):
     return combined_df
 
 # ==========================================
-# LINEÁRNE BEZPEČNÉ FIFO JADRO (BEZ WHILE CYKLOV)
+# STABILNÉ LINEÁRNE FIFO JADRO (OPRAVENÝ BUG INDEXU [0])
 # ==========================================
 def run_fifo_engine(df, cached_rates):
     action_pattern = r'(buy|sell|nákup|nakup|predaj)'
@@ -178,7 +179,7 @@ def run_fifo_engine(df, cached_rates):
             fifo_pools[ticker] = []
             lot_counters[ticker] = 0
             
-        # 1. Krokové pridanie NÁKUPU
+        # NÁKUP: Pridanie novej šarže
         if 'buy' in action or 'nákup' in action or 'nakup' in action:
             lot_counters[ticker] += 1
             fifo_pools[ticker].append({
@@ -190,25 +191,23 @@ def run_fifo_engine(df, cached_rates):
                 'currency_orig': currency
             })
             
-        # 2. Lineárne spracovanie PREDAJA (bezpečné odpočítavanie s limitom dĺžky poľa)
+        # PREDAJ: Bezpečné lineárne párovanie
         elif 'sell' in action or 'predaj' in action:
             shares_to_sell = shares
-            available_lots = fifo_pools[ticker]
+            loop_limit = len(fifo_pools[ticker])
             
-            # Bezpečný prechod cez indexy, ktorý nikdy nespadne do nekonečnej slučky
-            for _ in range(len(available_lots)):
-                if shares_to_sell <= 0 or len(fifo_pools[ticker]) == 0:
+            for _ in range(loop_limit):
+                if shares_to_sell <= 1e-7 or len(fifo_pools[ticker]) == 0:
                     break
                     
+                # VELKÁ OPRAVA: [0] vytiahne prvý konkrétny dictionary objekt z poľa
                 oldest_lot = fifo_pools[ticker][0]
                 
-                # Ak je predaj väčší alebo rovný veľkosti lotu, lot kompletne spotrebujeme
                 if oldest_lot['shares'] <= (shares_to_sell + 1e-7):
                     matched_shares = oldest_lot['shares']
                     shares_to_sell -= matched_shares
                     fifo_pools[ticker].pop(0)
                 else:
-                    # Ak lot pokrýva celý zvyšok predaja
                     matched_shares = shares_to_sell
                     oldest_lot['shares'] -= matched_shares
                     shares_to_sell = 0
@@ -236,7 +235,7 @@ def run_fifo_engine(df, cached_rates):
                 t_taxable.append(taxable_profit)
                 t_years.append(row_date.year)
                 
-            # Ak investor predal viac, než aplikácia našla v histórii nákupov
+            # Ak sa predalo viac ako sa reálne nakúpilo (chýbajúca história)
             if shares_to_sell > 1e-7:
                 t_tickers.append(ticker)
                 t_names.append(name)
@@ -244,4 +243,7 @@ def run_fifo_engine(df, cached_rates):
                 t_buydates.append('Neznámy')
                 t_selldates.append(row_date.strftime('%Y-%m-%d'))
                 t_days.append(0)
+                t_revenue.append(shares_to_sell * price_eur)
+                t_costs.append(0.0)
+                t_profit.append(0.0)
 
