@@ -158,13 +158,13 @@ if uploaded_files:
         cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
         st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
         
-        st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): **{ks_mlade:.5f} ks**")
-        
         trhova_hodnota_mlade = ks_mlade * aktualna_cena
         zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
         dan_19 = round(zisk_mlade * 0.19, 2)
         odvody_14 = round(zisk_mlade * 0.14, 2)
         celkovy_vypal_statu = dan_19 + odvody_14
+        
+        st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
         st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: `{zisk_mlade:.2f} EUR` | Daň z príjmu (19%): `{dan_19:.2f} EUR` | Zdravotné odvody (14%): `{odvody_14:.2f} EUR` | **Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR**")
         
         # =========================================================================
