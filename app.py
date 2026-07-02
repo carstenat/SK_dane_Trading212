@@ -11,34 +11,33 @@ from datetime import datetime, timedelta
 # ==========================================
 TAX_RATE_SK = 0.19
 HEALTH_INSURANCE_RATE_SK = 0.15
-TAX_EXEMPTION_LIMIT_SK = 500.0  # § 9 ods. 1 písm. k) ZDP
+TAX_EXEMPTION_LIMIT_SK = 500.0  # Oslobodenie 500 € podľa § 9 ZDP
 
 st.set_page_config(
-    page_title="Súkromný PRO Optimalizátor pre Trading 212",
+    page_title="PRO Optimalizátor Trading 212",
     page_icon="📈",
     layout="wide"
 )
 
-# Inicializácia Session State proti nechcenému resetu dát
+# Inicializácia pamäte pre zamedzenie resetov rozhrania
 if 'df_raw' not in st.session_state:
     st.session_state.df_raw = None
 if 'selected_year' not in st.session_state:
     st.session_state.selected_year = "Všetky"
 
 # ==========================================
-# POMOCNÉ FUNKCIE A PARSER KURZOV ECB
+# POMOCNÉ ČISTIACE A PARSOVACIE MODULY
 # ==========================================
 @st.cache_data(ttl=86400)
 def fetch_ecb_daily_rates_for_year(year):
-    """Sťahuje historické denné kurzy USD a GBP voči EUR z ECB pre daný rok."""
+    """Automaticky sťahuje ECB výmenné kurzy z oficiálneho archívu."""
     rates = {'USD': {}, 'GBP': {}}
     try:
-        url = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.xml"
+        url = "https://europa.eu"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             root = ET.fromstring(response.content)
-            namespaces = {'ns': 'http://www.ecb.int/vocabulary/2002-08-01/eurofxref'}
-            
+            namespaces = {'ns': 'http://ecb.int'}
             for cube_time in root.findall('.//ns:Cube[@time]', namespaces):
                 date_str = cube_time.get('time')
                 try:
@@ -56,30 +55,26 @@ def fetch_ecb_daily_rates_for_year(year):
     return rates
 
 def get_ecb_rate(date_obj, currency, year_rates):
-    """Vráti kurz pre konkrétny deň. Ak je víkend, hľadá spätne najbližší piatok."""
+    """Zisťuje kurz pre daný deň s posunom na najbližší pracovný deň pri víkende."""
     if currency == 'EUR' or not currency:
         return 1.0
-    
     curr_dict = year_rates.get(currency, {})
     if not curr_dict:
         return 1.10
-        
     for i in range(6):
         check_date = (date_obj - timedelta(days=i)).strftime("%Y-%m-%d")
         if check_date in curr_dict:
             return curr_dict[check_date]
-            
     return 1.10
 
 def clean_numeric_string(val):
+    """Vyčistí a transformuje textové reťazce a európske desatinné čiarky na čísla."""
     if pd.isna(val):
         return 0.0
     if isinstance(val, (int, float)):
         return float(val)
-    
     val_str = str(val).strip()
     val_str = re.sub(r'[^\d.,\-]', '', val_str)
-    
     if ',' in val_str and '.' in val_str:
         if val_str.find(',') > val_str.find('.'):
             val_str = val_str.replace('.', '').replace(',', '.')
@@ -87,13 +82,13 @@ def clean_numeric_string(val):
             val_str = val_str.replace(',', '')
     elif ',' in val_str:
         val_str = val_str.replace(',', '.')
-        
     try:
         return float(val_str)
     except ValueError:
         return 0.0
 
 def normalize_columns(df):
+    """Unifikuje jazykové mutácie exportov (Slovak / English)."""
     mapping = {
         'time': 'Time', 'čas': 'Time', 'cas': 'Time',
         'action': 'Action', 'operácia': 'Action', 'operacia': 'Action', 'typ': 'Action',
@@ -104,7 +99,6 @@ def normalize_columns(df):
         'total': 'Total', 'celkom': 'Total', 'suma': 'Total',
         'withholding tax': 'WHT', 'zrazená daň': 'WHT', 'currency': 'Currency', 'mena': 'Currency'
     }
-    
     renamed_cols = {}
     for col in df.columns:
         col_lower = str(col).lower().strip()
@@ -115,20 +109,15 @@ def normalize_columns(df):
                 if key in col_lower:
                     renamed_cols[col] = target
                     break
-                    
     df = df.rename(columns=renamed_cols)
-    
     required_keys = ['Time', 'Action', 'Ticker', 'Name', 'Shares', 'PricePerShare', 'Total', 'WHT', 'Currency']
     for req in required_keys:
         if req not in df.columns:
-            if req == 'Currency':
-                df[req] = 'EUR'
-            else:
-                df[req] = np.nan
-            
+            df[req] = 'EUR' if req == 'Currency' else np.nan
     return df
 
 def process_uploaded_files(uploaded_files):
+    """Spracuje, zlúči a normalizuje nahraté dokumenty."""
     df_list = []
     for file in uploaded_files:
         try:
@@ -140,7 +129,7 @@ def process_uploaded_files(uploaded_files):
                     current_df['Currency_Detected'] = 'GBP'
             df_list.append(current_df)
         except Exception as e:
-            st.error(f"Chyba pri načítaní súboru: {e}")
+            st.error(f"Chyba pri spracovaní súboru: {e}")
             
     if not df_list:
         return None
@@ -155,15 +144,13 @@ def process_uploaded_files(uploaded_files):
     combined_df['Shares'] = combined_df['Shares'].apply(clean_numeric_string)
     combined_df['PricePerShare'] = combined_df['PricePerShare'].apply(clean_numeric_string)
     combined_df['Total'] = combined_df['Total'].apply(clean_numeric_string)
-    combined_df['WHT'] = combined_df['WHT'].apply(clean_numeric_string)
     
     combined_df['Time'] = pd.to_datetime(combined_df['Time'], format='mixed', errors='coerce')
     combined_df = combined_df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
-    
     return combined_df
 
 # ==========================================
-# STRIKTNÝ MULTI-CURRENCY FIFO ENGINE
+# ČISTÉ ODDELENÉ FIFO JADRO (BEZ SPREVÁDZANÝCH CHÝB)
 # ==========================================
 def run_fifo_engine(df, cached_rates):
     action_pattern = r'(buy|sell|nákup|nakup|predaj)'
@@ -177,7 +164,7 @@ def run_fifo_engine(df, cached_rates):
     realized_trades = []
     lot_counters = {}
     
-    for _, row in valid_df.iterrows():
+    for idx, row in valid_df.iterrows():
         ticker = str(row['Ticker']).strip().upper()
         action = str(row['Action']).lower()
         row_date = row['Time']
@@ -193,24 +180,25 @@ def run_fifo_engine(df, cached_rates):
             fifo_pools[ticker] = []
             lot_counters[ticker] = 0
             
-        # NÁKUP (Prírastok do fronty)
+        # 1. Krokové spracovanie NÁKUPU
         if 'buy' in action or 'nákup' in action or 'nakup' in action:
             lot_counters[ticker] += 1
-            fifo_pools[ticker].append({
+            new_lot = {
                 'date': row_date,
                 'shares': shares,
                 'price_eur': price_eur,
                 'orig_shares': shares,
                 'lot_id': lot_counters[ticker],
                 'currency_orig': currency
-            })
+            }
+            fifo_pools[ticker].append(new_lot)
             
-        # PREDAJ (Párovanie FIFO z najstaršieho lotu)
+        # 2. Krokové spracovanie PREDAJA
         elif 'sell' in action or 'predaj' in action:
             shares_to_sell = shares
             
             while shares_to_sell > 0 and len(fifo_pools[ticker]) > 0:
-                oldest_lot = fifo_pools[ticker][0]  # FIX: Bezpečný a presný výber prvého lotu indexom
+                oldest_lot = fifo_pools[ticker][0]  # Bezpečný a nemenný výber najstaršieho lotu
                 
                 if oldest_lot['shares'] <= shares_to_sell:
                     matched_shares = oldest_lot['shares']
@@ -231,7 +219,8 @@ def run_fifo_engine(df, cached_rates):
                 is_exempt = days_held >= 365
                 taxable_profit = profit_loss_eur if not is_exempt else 0.0
                 
-                realized_trades.append({
+                # Izolovaná definícia záznamu mimo volania funkcie (Ochrana pred SyntaxError)
+                trade_record = {
                     'Ticker': ticker,
                     'Spoločnosť': name,
                     'Kusy': matched_shares,
@@ -244,11 +233,10 @@ def run_fifo_engine(df, cached_rates):
                     'Oslobodené': 'Áno' if is_exempt else 'Nie',
                     'Zdaniteľný zisk': taxable_profit,
                     'Rok_Predaja': row_date.year
-                })
+                }
+                realized_trades.append(trade_record)
                 
             if shares_to_sell > 0:
-                realized_trades.append({
+                short_record = {
                     'Ticker': ticker,
                     'Spoločnosť': name,
-                    'Kusy': shares_to_sell,
-                    'Dátum nákupu': 'Neznámy',
