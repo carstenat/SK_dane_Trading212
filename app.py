@@ -18,7 +18,7 @@ else:
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
 st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
 
-# Bezpečné úložisko, aby Streamlit pri klikaní nezabúdal nahrané súbory
+# Bezpečné úložisko dát v Session State proti premazaniu cloudom pri klikaní
 if "cache_df" not in st.session_state:
     st.session_state.cache_df = None
 
@@ -32,10 +32,16 @@ if uploaded_files:
 
 if st.session_state.cache_df is not None:
     df = st.session_state.cache_df.copy()
+    
+    # 🔍 DYNAMICKÉ VYHĽADÁVANIE STĹPCOV PRE NOVÉ FORMATY TRADING 212
+    col_shares = [c for c in df.columns if 'shares' in c.lower() or 'kus' in c.lower()][0] if any('shares' in c.lower() or 'kus' in c.lower() for c in df.columns) else 'No. of shares'
+    col_total = [c for c in df.columns if 'total' in c.lower() or 'celkom' in c.lower()][0] if any('total' in c.lower() or 'celkom' in c.lower() for c in df.columns) else 'Total'
+    col_wht = [c for c in df.columns if 'withholding' in c.lower() or 'zrazen' in c.lower()][0] if any('withholding' in c.lower() or 'zrazen' in c.lower() for c in df.columns) else 'Withholding tax'
+    
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     
     # =========================================================================
-    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY
+    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY (ZOBRAZENÉ HNEĎ)
     # =========================================================================
     df_dividendy = df[df['Action'].str.lower().str.contains('dividend', na=False)].copy()
     df_uroky = df[df['Action'].str.lower().str.contains('interest', na=False)].copy()
@@ -46,8 +52,8 @@ if st.session_state.cache_df is not None:
     with col_div:
         st.header("💰 Modul Dividend")
         if not df_dividendy.empty:
-            total_div_gross = pd.to_numeric(df_dividendy['Total'], errors='coerce').fillna(0.0).sum()
-            total_div_wht = pd.to_numeric(df_dividendy.get('Withholding tax', 0), errors='coerce').fillna(0.0).sum()
+            total_div_gross = pd.to_numeric(df_dividendy[col_total], errors='coerce').fillna(0.0).sum()
+            total_div_wht = pd.to_numeric(df_dividendy[col_wht], errors='coerce').fillna(0.0).sum() if col_wht in df_dividendy.columns else 0.0
             total_div_net = total_div_gross - total_div_wht
             
             st.metric("Celkové pripísané dividendy (Brutto)", f"{total_div_gross:.2f} EUR")
@@ -55,14 +61,14 @@ if st.session_state.cache_df is not None:
             st.write(f"**Čisté vyplatené dividendy (Netto):** {total_div_net:.2f} EUR")
             
             with st.expander("Zobraziť históriu dividend"):
-                st.dataframe(df_dividendy[['Time', 'Ticker', 'Action', 'Total', 'Withholding tax']])
+                st.dataframe(df_dividendy[['Time', 'Ticker', 'Action', col_total]])
         else:
             st.info("V importovaných súboroch sa nenachádzajú žiadne záznamy o dividendách.")
             
     with col_int:
         st.header("💶 Modul Úrokov")
         if not df_uroky.empty:
-            total_interest_brutto = pd.to_numeric(df_uroky['Total'], errors='coerce').fillna(0.0).sum()
+            total_interest_brutto = pd.to_numeric(df_uroky[col_total], errors='coerce').fillna(0.0).sum()
             dan_z_urokov = total_interest_brutto * 0.19
             total_interest_netto = total_interest_brutto - dan_z_urokov
             
@@ -71,15 +77,14 @@ if st.session_state.cache_df is not None:
             st.write(f"**Čistý výnos z úrokov po zdanení:** {total_interest_netto:.2f} EUR")
             
             with st.expander("Zobraziť históriu pripísaných úrokov"):
-                st.dataframe(df_uroky[['Time', 'Action', 'Total']])
+                st.dataframe(df_uroky[['Time', 'Action', col_total]])
         else:
             st.info("V importovaných súboroch sa nenachádzajú žiadne záznamy o úrokoch z hotovosti.")
 
-    # Spracovanie dát pre akcie
+    # Spracovanie dát pre akcie s dynamickými stĺpcami
     df = df.dropna(subset=['Time', 'Ticker']).sort_values(by='Time').reset_index(drop=True)
-    df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
-    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
-    df['Withholding tax'] = pd.to_numeric(df['Withholding tax'], errors='coerce').fillna(0.0)
+    df['No. of shares'] = pd.to_numeric(df[col_shares], errors='coerce').fillna(0.0)
+    df['Total'] = pd.to_numeric(df[col_total], errors='coerce').fillna(0.0)
     df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
         
     databaza_mien = {}
@@ -93,7 +98,6 @@ if st.session_state.cache_df is not None:
     st.markdown("---")
     st.header("🔍 Hlavný optimalizátor pozície")
     
-    # Rozšírené vyhľadávanie typov akcií (ochrana pred zmenami textov zo strany platformy)
     df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit|order|trade', na=False)].copy()
     zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
     
@@ -116,13 +120,11 @@ if st.session_state.cache_df is not None:
         with col2:
             aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR:", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_final")
         
-        # Pevne ukotvené tlačidlo na hlavnej úrovni - už nikdy nezmizne
         tlacidlo_kliknute = st.button("🚀 Spustiť daňový prepočet", type="primary", use_container_width=True)
         
         if tlacidlo_kliknute:
             df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
             
-            # NEPRIESTRELNÝ FIFO MOTOR (reaguje na akékoľvek formáty zápisu)
             sklad_aktualny = []
             for _, riadok in df_ticker.iterrows():
                 typ = str(riadok['Action']).lower()
@@ -130,11 +132,9 @@ if st.session_state.cache_df is not None:
                 total = float(riadok['Total'])
                 datum = riadok['Time']
                 
-                # Nákup je akýkoľvek riadok s buy/nákupom alebo kladným počtom kusov
                 if 'buy' in typ or 'nákup' in typ or 'nakup' in typ or shares > 0.00001:
                     if shares > 0.00001:
                         sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total / shares})
-                # Predaj je akýkoľvek riadok s sell/predajom alebo záporným počtom kusov
                 elif 'sell' in typ or 'predaj' in typ or shares < -0.00001:
                     predat_este = abs(shares)
                     for b in sklad_aktualny:
@@ -148,11 +148,11 @@ if st.session_state.cache_df is not None:
             
             skutocny_stav = vstup_vlastnene
             if vstup_vlastnene > max_sklad_dostupny:
-                st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade Trading 212 reálne zostáva len {max_sklad_dostupny:.5f} ks. Prepočet orezávame na maximum.")
+                st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade reálne zostáva len {max_sklad_dostupny:.5f} ks. Prepočet orezávame na maximum.")
                 skutocny_stav = max_sklad_dostupny
                 
             if skutocny_stav <= 0:
-                st.warning("⚠️ Pre zvolenú akciu neboli v sklade nájdené žiadne otvorené nákupné pozície. Skontrolujte zadané kusy.")
+                st.warning("⚠️ Pre zvolenú akciu neboli v sklade nájdené žiadne otvorené pozície. Skontrolujte počet kusov.")
             else:
                 potrebne_ks = skutocny_stav
                 dnes = datetime.now()
@@ -174,6 +174,3 @@ if st.session_state.cache_df is not None:
                     vek_dni = (dnes.date() - nakup_pure.date()).days
                     cena_balika = vziat_ks * n['cena_za_kus']
                     aktualna_hodnota_balika = vziat_ks * aktualna_cena
-                    zisk_balika = aktualna_hodnota_balika - cena_balika
-                    
-                    d_nakupu = nakup_pure.strftime('%d.%m.%Y')
