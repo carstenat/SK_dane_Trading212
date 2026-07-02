@@ -1,14 +1,164 @@
-    # === POKRAČOVANIE VÁŠHO KÓDU (Doplnenie useknutej časti) ===
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+
+st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
+
+# =========================================================================
+# 💾 TRVALÁ PAMÄŤ CLOUDU (OCHRANA PRED RESETOM SÚBOROV)
+# =========================================================================
+if "databaza_transakcii" not in st.session_state:
+    st.session_state.databaza_transakcii = None
+
+if "vybrany_rok" not in st.session_state:
+    st.session_state.vybrany_rok = "Všetky"
+
+# =========================================================================
+# 🎨 PRÉMIOVÝ FINTECH VZHĽAD A NASTAVENIA ZORADENIA
+# =========================================================================
+st.sidebar.header("⚙️ Nastavenia vzhľadu")
+dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
+
+st.sidebar.header("🔀 Nastavenia zoznamu akcií")
+metoda_zoradenia = st.sidebar.radio(
+    "Zoradiť zoznam spoločností podľa:",
+    options=["Tickeru abecedne", "Názvu spoločnosti abecedne"]
+)
+
+if dark_mode:
+    st.markdown("<style>.stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; } h1, h2, h3, label, p, span { color: #FFFFFF !important; } div[data-testid='stMetric'] { background-color: #1E293B !important; border: 2px solid #475569 !important; border-radius: 12px !important; padding: 14px 18px !important; }</style>", unsafe_allow_html=True)
+else:
+    st.markdown("<style>.stApp { background-color: #FFFFFF !important; color: #1E293B !important; } h1, h2 { color: #0F172A !important; } div[data-testid='stMetric'] { background-color: #F8FAFC !important; border: 2px solid #CBD5E1 !important; border-radius: 12px !important; padding: 14px 18px !important; }</style>", unsafe_allow_html=True)
+
+st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
+st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
+
+uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True, key="uploader_main_final")
+
+if uploaded_files:
+    zoznam_df = []
+    for file in uploaded_files:
+        zoznam_df.append(pd.read_csv(file))
+    st.session_state.databaza_transakcii = pd.concat(zoznam_df, ignore_index=True)
+
+if st.session_state.databaza_transakcii is not None:
+    df = st.session_state.databaza_transakcii.copy()
+    
+    # 🔍 UNIVERZÁLNE PREMENOVANIE STĹPCOV - Ochrana pred duplicitnými stĺpcami (napr. Total vs Total (EUR))
+    mapovanie_stlpcov = {}
+    najdeny_shares = False
+    najdeny_total = False
+    najdeny_wht = False
+    
+    for c in df.columns:
+        if ('shares' in c.lower() or 'kus' in c.lower()) and not najdeny_shares:
+            mapovanie_stlpcov[c] = 'No. of shares'
+            najdeny_shares = True
+        elif ('total' in c.lower() or 'celkom' in c.lower()) and not najdeny_total:
+            mapovanie_stlpcov[c] = 'Total'
+            najdeny_total = True
+        elif ('withholding' in c.lower() or 'zrazen' in c.lower()) and not najdeny_wht:
+            mapovanie_stlpcov[c] = 'Withholding tax'
+            najdeny_wht = True
+            
+    df = df.rename(columns=mapovanie_stlpcov)
+    
+    if 'No. of shares' not in df.columns: df['No. of shares'] = 0.0
+    if 'Total' not in df.columns: df['Total'] = 0.0
+    if 'Withholding tax' not in df.columns: df['Withholding tax'] = 0.0
+    
+    df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
+    df['Rok'] = df['Time'].dt.year
+    
+    # Pre-processing pre vytvorenie unifikovanej databázy názvov spoločností
+    df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
+    databaza_mien = {}
+    for _, riadok in df.iterrows():
+        tick_c = str(riadok['Ticker_Clean'])
+        full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
+        if tick_c and tick_c != 'nan' and full_name and full_name != 'nan':
+            if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
+                databaza_mien[tick_c] = full_name
+
+    # =========================================================================
+    # 📅 MODUL SELEKCIE DAŇOVÉHO OBDOBIA (Tlačidlá)
+    # =========================================================================
+    st.markdown("---")
+    st.subheader("📅 Výber daňového obdobia na kontrolu")
+    
+    roky_v_datach = sorted([int(r) for r in df['Rok'].dropna().unique()])
+    moznosti_rokov = ["Všetky"] + [str(r) for r in roky_v_datach]
+    
+    cols_roky = st.columns(len(moznosti_rokov))
+    for idx, r_opt in enumerate(moznosti_rokov):
+        with cols_roky[idx]:
+            b_type = "primary" if st.session_state.vybrany_rok == r_opt else "secondary"
+            if st.button(f"Rok {r_opt}" if r_opt != "Všetky" else "Všetky obdobia", type=b_type, key=f"btn_rok_{r_opt}"):
+                st.session_state.vybrany_rok = r_opt
+                st.rerun()
+
+    if st.session_state.vybrany_rok == "Všetky":
+        df_filtrovane = df.copy()
+    else:
+        df_filtrovane = df[df['Rok'] == int(st.session_state.vybrany_rok)].copy()
+
+    # =========================================================================
+    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY (S EXPANDERMI)
+    # =========================================================================
+    df_dividendy = df_filtrovane[df_filtrovane['Action'].str.lower().str.contains('dividend', na=False)].copy()
+    df_uroky = df_filtrovane[df_filtrovane['Action'].str.lower().str.contains('interest', na=False)].copy()
+    
+    col_div, col_int = st.columns(2)
+    
+    with col_div:
+        st.header(f"💰 Modul Dividend ({st.session_state.vybrany_rok})")
+        if not df_dividendy.empty:
+            total_div_gross = pd.to_numeric(df_dividendy['Total'], errors='coerce').fillna(0.0).sum()
+            total_div_wht = pd.to_numeric(df_dividendy['Withholding tax'], errors='coerce').fillna(0.0).sum()
+            total_div_net = total_div_gross - total_div_wht
+            
+            st.metric("Celkové pripísané dividendy (Brutto)", f"{total_div_gross:.2f} EUR")
+            st.metric("Zahraničná zrazená daň (WHT)", f"{total_div_wht:.2f} EUR")
+            st.write(f"**Čisté vyplatené dividendy (Netto):** {total_div_net:.2f} EUR")
+            
+            with st.expander("Zobraziť históriu dividend pre toto obdobie"):
+                st.dataframe(df_dividendy[['Time', 'Ticker', 'Action', 'Total']].head(100))
+        else:
+            st.info("Pre zvolené obdobie sa nenašli žiadne dividendy.")
+            
+    with col_int:
+        st.header(f"💶 Modul Úrokov ({st.session_state.vybrany_rok})")
+        if not df_uroky.empty:
+            total_interest_brutto = pd.to_numeric(df_uroky['Total'], errors='coerce').fillna(0.0).sum()
+            dan_z_urokov = total_interest_brutto * 0.19
+            total_interest_netto = total_interest_brutto - dan_z_urokov
+            
+            st.metric("Pripísané denné úroky (Brutto)", f"{total_interest_brutto:.2f} EUR")
+            st.metric("Daňová povinnosť v SR (19%)", f"{dan_z_urokov:.2f} EUR")
+            st.write(f"**Čistý výnos z úrokov po zdanení:** {total_interest_netto:.2f} EUR")
+            
+            with st.expander("Zobraziť históriu pripísaných úrokov pre toto obdobie"):
+                st.dataframe(df_uroky[['Time', 'Action', 'Total']].head(100))
+        else:
+            st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
+
+    df = df.dropna(subset=['Time', 'Ticker']).sort_values(by='Time').reset_index(drop=True)
+    df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
+    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
+
+    # =========================================================================
+    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (VÝPOČET PRE VŠETKY TICKERY CEZ FIFO)
+    # =========================================================================
+    st.markdown("---")
+    st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
+    
     zoznam_tickerov_vsetky = sorted([t for t in df['Ticker_Clean'].unique() if t and t != 'NAN'])
     
     realizovane_obchody_rok = []
-    otvorene_loty_portfólio = dict()
+    otvorene_loty_portfolio = {}
 
-    # Prechádzame celú históriu kvôli správnemu FIFO párovaniu
     for t in zoznam_tickerov_vsetky:
         df_t = df[df['Ticker_Clean'] == t].copy()
-        
-        # Fronta nákupných lotov (FIFO)
         nakupne_loty = []
         
         for _, row in df_t.iterrows():
@@ -16,31 +166,27 @@
             množstvo = float(row['No. of shares'])
             total_val = float(row['Total'])
             
-            # Výpočet ceny za kus, ak v CSV chýba explicitný stĺpec
-            cena_ks = (total_val / množstvo) if informed_shares := (množstvo > 0) else 0.0
+            cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
             
-            # 1. Spracovanie NÁKUPU (BUY) alebo prichádzajúcich akcií
-            if 'buy' in akcia or 'market buy' in akcia:
-                lot = dict()
-                lot['množstvo'] = množstvo
-                lot['cena_nakup'] = cena_ks
-                lot['datum_nakup'] = row['Time']
+            if 'buy' in akcia:
+                lot = {
+                    'množstvo': množstvo,
+                    'cena_nakup': cena_ks,
+                    'datum_nakup': row['Time']
+                }
                 nakupne_loty.append(lot)
                 
-            # 2. Spracovanie PREDAJA (SELL) pomocou FIFO
-            elif 'sell' in akcia or 'market sell' in akcia:
+            elif 'sell' in akcia:
                 množstvo_na_predaj = množstvo
                 
                 while množstvo_na_predaj > 0 and len(nakupne_loty) > 0:
                     aktualny_lot = nakupne_loty[0]
                     
                     if aktualny_lot['množstvo'] <= množstvo_na_predaj:
-                        # Spotrebujeme celú šaržu
                         odpredane_množstvo = aktualny_lot['množstvo']
                         množstvo_na_predaj -= odpredane_množstvo
                         nakupne_loty.pop(0)
                     else:
-                        # Spotrebujeme len časť šarže
                         odpredane_množstvo = množstvo_na_predaj
                         aktualny_lot['množstvo'] -= odpredane_množstvo
                         množstvo_na_predaj = 0
@@ -49,120 +195,4 @@
                     vydaj = odpredane_množstvo * aktualny_lot['cena_nakup']
                     zisk_z_predaja = prijem - vydaj
                     
-                    # Kontrola 1-ročného časového testu v SR
                     dni_drzania = (row['Time'] - aktualny_lot['datum_nakup']).days
-                    oslobodene = dni_drzania >= 365
-                    
-                    # Ak predaj patrí do vybraného roku, zapíšeme ho do reportu
-                    if st.session_state.vybrany_rok == "Všetky" or row['Rok'] == int(st.session_state.vybrany_rok):
-                        obchod = dict()
-                        obchod['Ticker'] = t
-                        obchod['Spoločnosť'] = databaza_mien.get(t, "Neznáma")
-                        obchod['Kusy'] = odpredane_množstvo
-                        obchod['Zisk/Strata'] = zisk_z_predaja
-                        obchod['Oslobodené'] = "Áno (Časový test)" if oslobodene else "Nie (Podlieha dani)"
-                        obchod['Zdaniteľný Zisk'] = 0.0 if oslobodene else zisk_z_predaja
-                        realizovane_obchody_rok.append(obchod)
-                        
-        # Zostávajúce loty uložíme ako otvorené pozície k dnešnému dňu
-        otvorene_loty_portfólio[t] = [lot for lot in nakupne_loty if lot['množstvo'] > 0.000001]
-
-    # Vykreslenie globálneho FIFO daňového reportu
-    if len(realizovane_obchody_rok) == 0:
-        st.info(f"ℹ️ V daňovom období '{st.session_state.vybrany_rok}' ste nerealizovali žiadne predaje (SELL). Daňový základ z predaja cenných papierov je nulový.")
-        zdanitelny_zisk_celkom = 0.0
-    else:
-        df_realizovane = pd.DataFrame(realizovane_obchody_rok)
-        st.dataframe(df_realizovane, use_container_width=True)
-        
-        # Sčítame iba obchody, ktoré nesplnili časový test a skončili v zisku
-        zdanitelny_zisk_celkom = df_realizovane['Zdaniteľný Zisk'].sum()
-        zdanitelny_zisk_celkom = max(0.0, zdanitelny_zisk_celkom)
-
-    # Výpočet daní a odvodov podliehajúcich novelizácii SR pre rok 2026
-    odhadovana_dan = zdanitelny_zisk_celkom * 0.19
-    odhadovane_odvody = zdanitelny_zisk_celkom * 0.15  # Zvýšená sadzba zo 14% na 15% v SR
-
-    col_m1, col_m2, col_m3 = st.columns(3)
-    with col_m1:
-        st.metric("Krátkodobý zdaniteľný zisk", f"{zdanitelny_zisk_celkom:,.2f} EUR")
-    with col_m2:
-        st.metric("Daň z príjmu FO (19%)", f"{odhadovana_dan:,.2f} EUR")
-    with col_m3:
-        st.metric("Zdravotné odvody (15%)", f"{odhadovane_odvody:,.2f} EUR")
-
-    # =========================================================================
-    # 🎯 POKROČILÝ FIFO OPTIMALIZÁTOR LOTOV (PRE VYBRANÝ TITUL)
-    # =========================================================================
-    st.markdown("---")
-    st.header("🎯 Pokročilý FIFO Optimalizátor otvorených šarží")
-    st.write("Tu uvidíte detailný rozpad nákupných šarží (lotov) pre konkrétnu akciu a zostávajúce dni do oslobodenia.")
-
-    # Filtrujeme iba tituly, ktoré majú reálne otvorené pozície
-    zoznam_otvorenych_tickerov = sorted([t for t, loty in otvorene_loty_portfólio.items() if len(loty) > 0])
-
-    if len(zoznam_otvorenych_tickerov) > 0:
-        # Generovanie položiek pre vyhľadávanie v selectboxe
-        polozky_pre_select = []
-        for t in zoznam_otvorenych_tickerov:
-            nazov_firmy = databaza_mien.get(t, "Neznámy názov")
-            polozky_pre_select.append(dict(ticker=t, nazov=nazov_firmy, zobrazenie=f"{t} — {nazov_firmy}"))
-            
-        # Zoradenie zoznamu podľa vybratej rádiového tlačidla v sidebare (Bezpečná flat úprava)
-        if metoda_zoradenia == "Tickeru abecedne":
-            polozky_pre_select = sorted(polozky_pre_select, key=lambda x: x['ticker'].lower())
-        else:
-            polozky_pre_select = sorted(polozky_pre_select, key=lambda x: x['nazov'].lower())
-
-        list_zobrazeni = [p['zobrazenie'] for p in polozky_pre_select]
-        
-        # Filtrovanie písaním priamo v natívnom Streamlit selectboxe
-        vybrany_titul_full = st.selectbox("Vyhľadajte alebo vyberte akciu pre kontrolu šarží:", list_zobrazeni)
-        
-        # Získanie prislúchajúceho tickeru
-        vybrany_ticker = [p['ticker'] for p in polozky_pre_select if p['zobrazenie'] == vybrany_titul_full][0]
-        
-        sarze_akcie = otvorene_loty_portfólio[vybrany_ticker]
-        dnesny_datum = datetime.now()
-        
-        zaznamy_sarzi_ui = []
-        potencialne_danove_riziko_celkom = 0.0
-        
-        for index, sarza in enumerate(sarze_akcie):
-            dni_drzania = (dnesny_datum - pd.to_datetime(sarza['datum_nakup'])).days
-            casovany_test_splneny = dni_drzania >= 365
-            dni_do_konca = max(0, 365 - dni_drzania)
-            
-            # Simulácia 10% zisku na šaržu pre potreby núdzového indikátora rizika
-            simulovany_zisk = (sarza['množstvo'] * sarza['cena_nakup']) * 0.10
-            danove_riziko_sarze = simulovany_zisk * (0.19 + 0.15) if not casovany_test_splneny else 0.0
-            
-            if not casovany_test_splneny:
-                potencialne_danove_riziko_celkom += danove_riziko_sarze
-                status_text = f"🔴 Zdaniteľná šarža (Čakať ešte {dni_do_konca} dní)"
-            else:
-                status_text = "🟢 OSME_OSLOBODENÉ (Časový test OK)"
-
-            zaznamy_sarzi_ui.append({
-                "Šarža": f"Šarža #{index + 1}",
-                "Dátum nákupu": pd.to_datetime(sarza['datum_nakup']).strftime('%Y-%m-%d'),
-                "Držané množstvo (Kusy)": round(sarza['množstvo'], 5),
-                "Nákupná cena": f"{sarza['cena_nakup']:.4f} EUR",
-                "Dni držania": dni_drzania,
-                "Status / Časový test": status_text,
-                "Modelové daňové riziko": f"{danove_riziko_sarze:.2f} EUR" if danove_riziko_sarze > 0 else "0.00 EUR"
-            })
-            
-        st.subheader(f"📋 Rozpad otvorených frakcií pre {vybrany_ticker}")
-        st.table(pd.DataFrame(zaznamy_sarzi_ui))
-        
-        # SIMULÁTOR NÚDZOVÉHO PREDAJA (Emergency Liquidation)
-        st.subheader("🚨 Indikátor Emergency Likvidácie")
-        if potencialne_danove_riziko_celkom > 0:
-            st.error(f"⚠️ POZOR: Ak by ste dnes celú pozíciu {vybrany_ticker} núdzovo predali, prídete na zbytočných daniach a odvodoch v SR o približne: {potencialne_danove_riziko_celkom:,.2f} EUR (počítané pri modelovom raste trhu o 10%).")
-        else:
-            st.success(f"✅ Všetky otvorené pozície na titule {vybrany_ticker} úspešne prekonali 1 rok. Môžete ich kedykoľvek predať so 100% oslobodením v SR.")
-    else:
-        st.info("V portfóliu nemáte aktuálne žiadne otvorené akcie.")
-else:
-    st.info("👋 Čakám na nahranie dát. Presuňte CSV súbory z Trading 212 do poľa vyššie.")
