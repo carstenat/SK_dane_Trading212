@@ -168,9 +168,11 @@ if st.session_state.databaza_transakcii is not None:
     
     databaza_mien = {}
     for _, riadok in df_akcie_len.iterrows():
-        databaza_mien[riadok['Ticker_Clean']] = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
+        tick_c = riadok['Ticker_Clean']
+        if tick_c and tick_c != 'UNKNOWN':
+            databaza_mien[tick_c] = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
 
-    zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique()])
+    zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique() if t != 'UNKNOWN'])
     
     realizovane_obchody_rok = []
     otvorene_loty_portfolio = {}
@@ -196,4 +198,3 @@ if st.session_state.databaza_transakcii is not None:
                 množstvo_na_predaj = abs(množstvo)
                 for lot in list(nakupne_loty):
                     if lot['množstvo'] <= 0 or množstvo_na_predaj <= 0:
-                        continue
