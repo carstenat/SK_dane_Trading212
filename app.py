@@ -123,7 +123,7 @@ if uploaded_files:
                 for n in sklad_aktualny:
                     if potrebne_ks < 1e-5:
                         break
-                    vziat_ks = min(n['shares'], potrebné_ks_check := potrebne_ks)
+                    vziat_ks = min(n['shares'], potrebne_ks)
                     potrebne_ks -= vziat_ks
                     
                     nakup_pure = pd.to_datetime(n['date']).to_pydatetime()
@@ -131,7 +131,7 @@ if uploaded_files:
                     cena_balika = vziat_ks * n['cena_za_kus']
                     
                     d_nakupu = nakup_pure.strftime('%d.%m.%Y')
-                    text_mnozstva = f"{vraw := vziat_ks:.5f} ks"
+                    text_mnozstva = f"{vziat_ks:.5f} ks"
                     text_ceny = f"{n['cena_za_kus']:.2f} EUR/ks"
                     text_celkovo = f"Spolu: {cena_balika:.2f} EUR"
                     
@@ -153,12 +153,12 @@ if uploaded_files:
                 ks_bez_dane = round(ks_bez_dane, 5)
                 ks_mlade = round(ks_mlade, 5)
                 
-                # 🛡️ FIX 1: Absolútna, nepriestrelná synchronizácia textov a delenia
+                # Vykreslenie synchronizovaného textu a progress baru na reálny očistený stav
                 st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
                 vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
                 st.progress(max(0.0, min(1.0, vypocitany_pomer)))
                 
-                # 🟢 1. ZELENÁ KARTA
+                # 🔓 ZELENÁ KARTA - Surový textový výpis na ploche
                 if aktualna_cena > 0:
                     trhova_hodnota_safe = ks_bez_dane * aktualna_cena
                     cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
@@ -166,12 +166,12 @@ if uploaded_files:
                 else:
                     st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks**")
                 
-                # 🔒 2. ORANŽOVO-ŽLTÁ VÝSTRAHA (FIX 2: Garancia vykreslenia aj pri nulovej cene)
+                # 🔓 ORANŽOVO-ŽLTÁ KARTA - ABSOLÚTNE LINEÁRNA, PLOCHÁ STRUKTÚRA BEZ VNÚTORNÝCH BLOKOV
                 trhova_hodnota_mlade = ks_mlade * aktualna_cena
                 zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
                 dan_19 = round(zisk_mlade * 0.19, 2)
                 odvody_14 = round(zisk_mlade * 0.14, 2)
                 celkovy_vypal_statu = dan_19 + odvody_14
                 
-                # Výstraha pre mladé frakcie beží úplne lineárne a svieti VŽDY
-                if ks_mlade > 0:
+                # Žltá karta svieti VŽDY a bezpečne reaguje na zadanú cenu
+                st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): **{ks_mlade:.5f} ks**")
