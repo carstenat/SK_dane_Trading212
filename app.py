@@ -30,23 +30,36 @@ else:
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
 st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
 
-# =========================================================================
-# 📦 KRABICA Č. 1: HLAVNÝ OPTIMALIZÁTOR SKLADU (Náš zamknutý checkpoint)
-# =========================================================================
-def vypocitaj_a_zobraz_optimalizator(df):
-    df_akcie = df[df['Action'].str.lower().str.contains('buy|investment|deposit|sell|divestment|withdrawal|rebalancing', na=False)].copy()
+uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True, key="uploader_main_final")
+
+if uploaded_files:
+    zoznam_df = []
+    for file in uploaded_files:
+        zoznam_df.append(pd.read_csv(file))
+        
+    df = pd.concat(zoznam_df, ignore_index=True)
+    df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
+    df = df.dropna(subset=['Time', 'Ticker']).sort_values(by='Time').reset_index(drop=True)
     
-    df_akcie['Ticker_Clean'] = df_akcie['Ticker'].fillna('').astype(str).str.strip().str.upper()
-    zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
+    df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
+    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
+    df['Withholding tax'] = pd.to_numeric(df['Withholding tax'], errors='coerce').fillna(0.0)
+    df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
     
     databaza_mien = {}
-    for _, riadok in df_akcie.iterrows():
+    for _, riadok in df.iterrows():
         tick_c = str(riadok['Ticker_Clean'])
         full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
         if tick_c and tick_c != 'nan' and full_name and full_name != 'nan':
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
                 databaza_mien[tick_c] = full_name
-                
+
+    st.markdown("##")
+    st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
+    
+    df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)].copy()
+    zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
+    
     if zoznam_tickerov_all:
         ponuka_pre_menu = []
         mapovanie_tickerov = {}
@@ -56,18 +69,16 @@ def vypocitaj_a_zobraz_optimalizator(df):
             ponuka_pre_menu.append(text_riadku)
             mapovanie_tickerov[text_riadku] = t
             
-        st.markdown("##")
-        st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_checkpoint")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_final_lock")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_checkpoint")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_final_lock")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_checkpoint")
-            
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_final_lock")
+        
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
         sklad_aktualny = []
@@ -77,10 +88,10 @@ def vypocitaj_a_zobraz_optimalizator(df):
             total = float(riadok['Total'])
             datum = riadok['Time']
             
-            if 'buy' in typ or 'investment' in typ or 'deposit' in typ:
+            if 'buy' in typ or 'nákup' in typ or 'nakup' in typ:
                 if shares > 0.00001:
                     sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total/shares})
-            elif 'sell' in typ or 'divestment' in typ or 'withdrawal' in typ or 'rebalancing' in typ or shares < 0:
+            elif 'sell' in typ or 'predaj' in typ or shares < 0:
                 predat_este = abs(shares)
                 for b in sklad_aktualny:
                     if predat_este > 1e-6 and b['shares'] > 0:
@@ -88,12 +99,12 @@ def vypocitaj_a_zobraz_optimalizator(df):
                         b['shares'] -= vziat
                         predat_este -= vziat
                 sklad_aktualny = [x for x in sklad_aktualny if x['shares'] > 1e-6]
-                
+        
         max_sklad_dostupny = sum([x['shares'] for x in sklad_aktualny])
         
         if vstup_vlastnene > 0:
             if vstup_vlastnene > max_sklad_dostupny:
-                st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom reálnom sklade Trading 212 zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame na vaše reálne maximum.")
+                st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade Trading 212 zostáva len {max_sklad_dostupny:.5f} ks {vybrany_ticker_pure}. Výpočet orezávame na vaše reálne maximum.")
                 skutocny_stav = max_sklad_dostupny
             else:
                 skutocny_stav = vstup_vlastnene
@@ -135,7 +146,7 @@ def vypocitaj_a_zobraz_optimalizator(df):
                         zostava_dni = 365 - vek_dni
                         riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
                         rozpis_textov.append(riadok_prehladu)
-                        
+                
                 ks_bez_dane = round(ks_bez_dane, 5)
                 ks_mlade = round(ks_mlade, 5)
                 
@@ -159,21 +170,12 @@ def vypocitaj_a_zobraz_optimalizator(df):
                     st.write("Tu nájdete kompletný chronologický zoznam vašich nákupov, z ktorých je poskladaná dnešná otvorená pozícia:")
                     for r_text in rozpis_textov:
                         st.write(r_text)
-        return vybrany_ticker_pure
-    return None
-
-# =========================================================================
-# 🔒 KRABICA Č. 2: IDENTICKÝ PREHĽAD DIVIDEND (S FIXNUTÝM EXCEPT BLOKOM)
-# =========================================================================
-def vypocitaj_a_zobraz_dividendy(df, vybrany_ticker):
-    if not vybrany_ticker:
-        return
-    try:
-        df['Action_Lower'] = df['Action'].fillna('').astype(str).str.lower()
-        df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
-        df_div = df[df['Action_Lower'].str.contains('dividend|dividenda', na=False)].copy()
-        df_div_ticker = df_div[df_div['Ticker_Clean'] == vybrany_ticker].copy()
-        
-        with st.expander("💰 Zobraziť prehľad a zdanenie Dividend pre vybranú akciu"):
-            if len(df_div_ticker) > 0:
-                total_brutto = 0.0
+                        
+    # =========================================================================
+    # 🔒 SEKCIA PRE DIVIDENDY (ÚPLNE PLOCHÁ, MATEMATICKY ODDELENÁ BEZ TRY/EXCEPT)
+    # =========================================================================
+    df_div = df[df['Action'].str.lower().str.contains('dividend|dividenda', na=False)].copy()
+    
+    if len(df_div) > 0:
+        st.markdown("##")
+        with st.expander("💰 Zobraziť podklady pre Dividendy (Globálny sumár z CSV)"):
