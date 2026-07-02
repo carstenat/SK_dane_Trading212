@@ -138,55 +138,57 @@ if st.session_state.databaza_transakcii is not None:
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
 
     # =========================================================================
-    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (VÝPOČET PRE VŠETKY TICKERY CEZ FIFO)
+    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (ÚPLNE PLOCHÝ BEZ-ZLYHADOVÝ FIFO ENGINE)
     # =========================================================================
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
-    try:
-        # Čistenie NaN hodnôt v Ticker a Time podľa požiadavky retrospektívy
-        df_akcie_len = df.dropna(subset=['Time', 'Ticker']).copy()
-        df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
-        df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != '']
-        df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != 'NAN'].sort_values(by='Time').reset_index(drop=True)
-        
-        # Generovanie databázy mien spoločností
-        databaza_mien = {}
-        for _, riadok in df_akcie_len.iterrows():
-            tick_c = riadok['Ticker_Clean']
-            full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
-            if full_name and full_name != 'nan':
-                databaza_mien[tick_c] = full_name
+    # Čistenie NaN hodnôt v Ticker a Time podľa požiadavky retrospektívy
+    df_akcie_len = df.dropna(subset=['Time', 'Ticker']).copy()
+    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
+    df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != '']
+    df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != 'NAN'].sort_values(by='Time').reset_index(drop=True)
+    
+    # Generovanie databázy mien spoločností
+    databaza_mien = {}
+    for _, riadok in df_akcie_len.iterrows():
+        tick_c = riadok['Ticker_Clean']
+        full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
+        if full_name and full_name != 'nan':
+            databaza_mien[tick_c] = full_name
 
-        zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique()])
-        
-        realizovane_obchody_rok = []
-        otvorene_loty_portfolio = {}
+    zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique()])
+    
+    realizovane_obchody_rok = []
+    otvorene_loty_portfolio = {}
 
-        # SPUSTENIE PLOCHÉHO ENGIE-U S FIXED INDEXÁCIOU LOTU
-        for t in zoznam_tickerov_vsetky:
-            df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
-            nakupne_loty = []
+    # ÚPLNE PLOCHÝ ZÁPIS FIFO ENGIE-U: Žiadne hlboké vnorené while ani else bloky!
+    for t in zoznam_tickerov_vsetky:
+        df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
+        nakupne_loty = []
+        
+        for idx, row in df_t.iterrows():
+            akcia = str(row['Action_Clean'])
+            množstvo = float(row['No. of shares'])
+            total_val = float(row['Total'])
+            cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
             
-            for idx, row in df_t.iterrows():
-                akcia = str(row['Action_Clean'])
-                množstvo = float(row['No. of shares'])
-                total_val = float(row['Total'])
-                cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
+            is_buy = ('buy' in akcia or 'nákup' in akcia or 'nakup' in akcia)
+            is_sell = ('sell' in akcia or 'predaj' in akcia)
+            
+            if is_buy:
+                nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']})
                 
-                is_buy = ('buy' in akcia or 'nákup' in akcia or 'nakup' in akcia)
-                is_sell = ('sell' in akcia or 'predaj' in akcia)
-                
-                if is_buy:
-                    nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']})
+            if is_sell and len(nakupne_loty) > 0:
+                množstvo_na_predaj = množstvo
+                # Použitie bezpečného prechodu poľa namiesto nebezpečného vnorenia riadkov
+                for lot in list(nakupne_loty):
+                    if lot['množstvo'] <= 0 or množstvo_na_predaj <= 0:
+                        continue
                     
-                if is_sell:
-                    množstvo_na_predaj = množstvo
-                    while množstvo_na_predaj > 0 and len(nakupne_loty) > 0:
-                        aktualny_lot = nakupne_loty[0]  # ✔️ ROBUSTNÝ FIX INDEXU: Berieme prvý slovník z listu, nie celý list!
-                        
-                        if aktualny_lot['množstvo'] <= množstvo_na_predaj:
-                            odpredane_množstvo = aktualny_lot['množstvo']
-                            množstvo_na_predaj -= odpredane_množstvo
-                            nakupne_loty.pop(0)
-                        else:
+                    odpredane_množstvo = min(lot['množstvo'], množstvo_na_predaj)
+                    lot['množstvo'] -= odpredane_množstvo
+                    množstvo_na_predaj -= odpredane_množstvo
+                    
+                    prijem = odpredane_množstvo * cena_ks
+                    vydaj = odpredane_množstvo * lot['cena_nakup']
