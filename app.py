@@ -168,7 +168,7 @@ if uploaded_files:
         st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: `{zisk_mlade:.2f} EUR` | Daň z príjmu (19%): `{dan_19:.2f} EUR` | Zdravotné odvody (14%): `{odvody_14:.2f} EUR` | **Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR**")
         
         # =========================================================================
-        # 📋 AKCIOVÝ BREAKDOWN (Zostáva 100% nedotknutý na ploche)
+        # 📋 AKCIOVÝ BREAKDOWN (Zostáva natvrdo vybalený na ploche)
         # =========================================================================
         st.markdown("---")
         st.subheader("📋 Detailný rozpis nákupných balíčkov (Frakcií)")
