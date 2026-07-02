@@ -35,7 +35,7 @@ if uploaded_files:
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🔍 UNIVERZÁLNE PREMENOVANIE STĹPCOV - Odstráni akékoľvek zoznamy a zjednotí formát
+    # 🔍 UNIVERZÁLNE PREMENOVANIE STFLDCOV - Odstráni akékoľvek zoznamy a zjednotí formát
     mapovanie_stlpcov = {}
     for c in df.columns:
         if 'shares' in c.lower() or 'kus' in c.lower():
@@ -45,7 +45,7 @@ if st.session_state.databaza_transakcii is not None:
         elif 'withholding' in c.lower() or 'zrazen' in c.lower():
             mapovanie_stlpcov[c] = 'Withholding tax'
             
-    df = df.rename(columns=mapoverride_stlpcov if 'mapovanie_stlpcov' in locals() else mapovanie_stlpcov)
+    df = df.rename(columns=mapovanie_stlpcov)
     
     # Doplnenie chýbajúcich stĺpcov pre istotu
     if 'No. of shares' not in df.columns: df['No. of shares'] = 0.0
@@ -109,71 +109,75 @@ if st.session_state.databaza_transakcii is not None:
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
                 databaza_mien[tick_c] = full_name
 
+    # =========================================================================
+    # 🔍 HLAVNÝ OPTIMALIZÁTOR POZÍCIE (PRIDANÝ MODUL)
+    # =========================================================================
     st.markdown("---")
     st.header("🔍 Hlavný optimalizátor pozície")
+
+    zoznam_tickerov = sorted([t for t in df['Ticker_Clean'].unique() if t != ''])
     
-    df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit|order|trade', na=False)].copy()
-    zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
-    
-    if zoznam_tickerov_all:
-        ponuka_pre_menu = []
-        mapovanie_tickerov = {}
-        for t in zoznam_tickerov_all:
-            full_company_name = databaza_mien.get(t, "Spoločnosť z platformy")
-            text_riadku = f"{t} - {full_company_name}"
-            ponuka_pre_menu.append(text_riadku)
-            mapovanie_tickerov[text_riadku] = t
+    if zoznam_tickerov:
+        vybrany_ticker = st.selectbox("Vyberte akciový ticker pre detailnú analýzu časového testu:", zoznam_tickerov)
+        
+        df_ticker = df[df['Ticker_Clean'] == vybrany_ticker].copy()
+        meno_akcie = databaza_mien.get(vybrany_ticker, "Neznámy titul")
+        st.subheader(f"Analýza pre: {vybrany_ticker} - {meno_akcie}")
+        
+        # Filtrujeme iba nákupné akcie pre analýzu držania
+        df_nakupy = df_ticker[df_ticker['Action'].str.lower().str.contains('buy', na=False)].copy()
+        
+        if not df_nakupy.empty:
+            aktualny_cas = datetime.now()
+            kumulativne_kusy = 0.0
+            kumulativne_naklady = 0.0
             
-        ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_final")
-        vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            vstup_vlastnene = st.number_input("Počet kusov plánovaných na predaj:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_final")
-        with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR:", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_final")
-        
-        tlacidlo_kliknute = st.button("🚀 Spustiť daňový prepočet", type="primary", use_container_width=True)
-        
-        if tlacidlo_kliknute:
-            if vstup_vlastnene <= 0:
-                st.warning("⚠️ Zadajte počet kusov väčší ako 0 pre vygenerovanie daňového prepočtu.")
-            else:
-                df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
+            riadky_analyzy = []
+            
+            for _, r in df_nakupy.iterrows():
+                kusy = float(r['No. of shares'])
+                total_cena = float(r['Total'])
+                cas_nakupu = r['Time']
                 
-                # FIFO MOTOR
-                sklad_aktualny = []
-                for _, riadok in df_ticker.iterrows():
-                    typ = str(riadok['Action']).lower()
-                    shares = float(riadok['No. of shares'])
-                    total = float(riadok['Total'])
-                    datum = riadok['Time']
-                    
-                    if 'buy' in typ or 'nákup' in typ or 'nakup' in typ or shares > 0.00001:
-                        if shares > 0.00001:
-                            sklad_aktualny.append({'shares': shares, 'date': datum, 'cena_za_kus': total / shares})
-                    elif 'sell' in typ or 'predaj' in typ or shares < -0.00001:
-                        predat_este = abs(shares)
-                        for b in sklad_aktualny:
-                            if predat_este > 1e-6 and b['shares'] > 0:
-                                vziat = min(b['shares'], predat_este)
-                                b['shares'] -= vziat
-                                predat_este -= vziat
-                        sklad_aktualny = [x for x in sklad_aktualny if x['shares'] > 1e-6]
-                
-                max_sklad_dostupny = sum([x['shares'] for x in sklad_aktualny])
-                
-                skutocny_stav = vstup_vlastnene
-                if vstup_vlastnene > max_sklad_dostupny:
-                    st.error(f"⚠️ Pozor: Zadáli ste {vstup_vlastnene:.5f} ks, ale vo vašom sklade reálne zostáva len {max_sklad_dostupny:.5f} ks. Prepočet orezávame na maximum.")
-                    skutocny_stav = max_sklad_dostupny
-                    
-                if skutocny_stav <= 0:
-                    st.warning(f"⚠️ Pre ticker {vybrany_ticker_pure} neboli v sklade nájdené žiadne otvorené pozície. (Dostupný stav na sklade: {max_sklad_dostupny:.5f} ks)")
+                if kusy > 0.00001:
+                    priemerna_cena_za_kus = total_cena / kusy
                 else:
-                    potrebne_ks = skutocny_stav
-                    dnes = datetime.now()
-                    ks_bez_dane = 0.0
-                    ks_mlade = 0.0
-                    vydavok_safe_balika = 0.0
+                    priemerna_cena_za_kus = 0.0
+                    
+                dni_drzania = (aktualny_cas - cas_nakupu).days
+                presiel_testom = dni_drzania >= 365
+                status_testu = "✅ Oslobodené (DRŽANÉ NAD 1 ROK)" if presiel_testom else "❌ Podlieha dani (Menej ako 1 rok)"
+                
+                kumulativne_kusy += kusy
+                kumulativne_naklady += total_cena
+                
+                riadky_analyzy.append({
+                    "Dátum nákupu": cas_nakupu.strftime('%Y-%m-%d %H:%M'),
+                    "Počet kusov": kusy,
+                    "Nákupná cena za kus": f"{priemerna_cena_za_kus:.4f} EUR",
+                    "Celkom zaplatené": f"{total_cena:.2f} EUR",
+                    "Dni držania": dni_drzania,
+                    "Časový test SR": status_testu
+                })
+            
+            df_vysledok = pd.DataFrame(riadky_analyzy)
+            
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                st.metric("Celkový akumulovaný objem (Kusy)", f"{kumulativne_kusy:.4f}")
+            with col_m2:
+                st.metric("Celkové investované náklady", f"{kumulativne_naklady:.2f} EUR")
+                
+            st.write("### Detailný rozpad nákupných šarží (Lotov):")
+            st.dataframe(df_vysledok, use_container_width=True)
+            
+            # Lineárne skladanie textu bez triple-quoted f-stringov (Ochrana pravidla č. 2)
+            txt_info = "💡 **Tip pre daňovú optimalizáciu v SR:**\n"
+            txt_info += "Slovenská legislatíva uplatňuje ročný časový test na predaj cenných papierov obchodovaných na regulovanej burze.\n"
+            txt_info += "Ak plánujete pozíciu čiastočne redukovať, uistite sa, že uplatňujete metódu FIFO (First-In, First-Out)\n"
+            txt_info += "a predávate prioritne tie šarže, ktoré majú v stĺpci Časový test status '✅ Oslobodené'.\n"
+            st.info(txt_info)
+        else:
+            st.warning("Pre tento ticker neboli nájdené žiadne priame nákupné transakcie (BUY).")
+    else:
+        st.info("Databáza neobsahuje žiadne platné tickery pre akciové pozície.")
