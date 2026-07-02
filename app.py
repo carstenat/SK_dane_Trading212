@@ -6,13 +6,28 @@ import re
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 💾 TRVALÁ PAMÄŤ CLOUDU (OCHRANA PRED RESETOM SÚBOROV)
+# 💾 TRVALÁ PAMÄŤ CLOUDU (BEZPEČNÝ ZÁMOK PRED VYMAZANÍM)
 # =========================================================================
 if "databaza_transakcii" not in st.session_state:
     st.session_state.databaza_transakcii = None
 
 if "vybrany_rok" not in st.session_state:
     st.session_state.vybrany_rok = "Všetky"
+
+# Funkcia na bezpečné očistenie textu na čisté float číslo (Odstraňuje EUR, USD, textové meny)
+def bezpecne_cislo(hodnota):
+    if pd.isna(hodnota):
+        return 0.0
+    text = str(hodnota).strip()
+    text = re.sub(r'[^\d,\.-]', '', text)
+    if ',' in text and '.' in text:
+        text = text.replace(',', '')
+    elif ',' in text:
+        text = text.replace(',', '.')
+    try:
+        return float(text)
+    except:
+        return 0.0
 
 # =========================================================================
 # 🎨 PRÉMIOVÝ FINTECH VZHĽAD A SIDEBAR
@@ -32,8 +47,9 @@ else:
     st.markdown("<style>.stApp { background-color: #FFFFFF !important; color: #1E293B !important; } h1, h2 { color: #0F172A !important; } div[data-testid='stMetric'] { background-color: #F8FAFC !important; border: 2px solid #CBD5E1 !important; border-radius: 12px !important; padding: 14px 18px !important; }</style>", unsafe_allow_html=True)
 
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
-st.write("Profesionálny Nástroj na kontrolu časového testu pred predajom akcií.")
+st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
 
+# 🌟 TRVALÝ NAKLADACÍ MECHANIZMUS: Súbory sa zapíšu do pamäte a už odtiaľ nezmiznú
 uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True, key="uploader_main_final")
 
 if uploaded_files:
@@ -41,21 +57,6 @@ if uploaded_files:
     for file in uploaded_files:
         zoznam_df.append(pd.read_csv(file))
     st.session_state.databaza_transakcii = pd.concat(zoznam_df, ignore_index=True)
-
-# Funkcia na bezpečné očistenie textu na čisté float číslo (Odstraňuje EUR, USD, textové meny)
-def bezpecne_cislo(hodnota):
-    if pd.isna(hodnota):
-        return 0.0
-    text = str(hodnota).strip()
-    text = re.sub(r'[^\d,\.-]', '', text)
-    if ',' in text and '.' in text:
-        text = text.replace(',', '')
-    elif ',' in text:
-        text = text.replace(',', '.')
-    try:
-        return float(text)
-    except:
-        return 0.0
 
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
@@ -164,7 +165,7 @@ if st.session_state.databaza_transakcii is not None:
             st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
 
     # =========================================================================
-    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (ČISTO ČÍSELNÝ PLOCHÝ FIFO ENGINE)
+    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (PREČISTENÝ PLOCHÝ FIFO ENGINE)
     # =========================================================================
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
@@ -187,11 +188,10 @@ if st.session_state.databaza_transakcii is not None:
     realizovane_obchody_rok = []
     otvorene_loty_portfolio = {}
 
-    # ✔️ STRIKTNE PLOCHÝ FIFO ENGINE BEZ AKÉHOKOĽVEK CHYBNÉHO VNORENIA CYKLOV
+    # PLOCHÝ PARSER (Ochrana proti IndentationError)
     for t in zoznam_tickerov_vsetky:
         df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
         nakupne_loty = []
         
         for idx, row in df_t.iterrows():
             množstvo = float(row['No. of shares'])
-            total_val = float(row['Total'])
