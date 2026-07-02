@@ -30,35 +30,23 @@ else:
 st.title("📈 Súkromný PRO Optimalizátor pre Trading 212 (SR)")
 st.write("Profesionálny nástroj na kontrolu časového testu pred predajom akcií.")
 
-uploaded_files = st.file_uploader("Sem presuňte vaše CSV exporty z Trading 212 (môžete aj viac naraz)", type=["csv"], accept_multiple_files=True)
-
-if uploaded_files:
-    zoznam_df = []
-    for file in uploaded_files:
-        zoznam_df.append(pd.read_csv(file))
-        
-    df = pd.concat(zoznam_df, ignore_index=True)
-    df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
-    df = df.dropna(subset=['Time']).sort_values(by='Time').reset_index(drop=True)
+# =========================================================================
+# 📦 KRABICA Č. 1: HLAVNÝ OPTIMALIZÁTOR SKLADU (Náš zamknutý checkpoint)
+# =========================================================================
+def vypocitaj_a_zobraz_optimalizator(df):
+    df_akcie = df[df['Action'].str.lower().str.contains('buy|investment|deposit|sell|divestment|withdrawal|rebalancing', na=False)].copy()
     
-    df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
-    df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
-    df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
+    df_akcie['Ticker_Clean'] = df_akcie['Ticker'].fillna('').astype(str).str.strip().str.upper()
+    zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
     
     databaza_mien = {}
-    for _, riadok in df.iterrows():
+    for _, riadok in df_akcie.iterrows():
         tick_c = str(riadok['Ticker_Clean'])
         full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
         if tick_c and tick_c != 'nan' and full_name and full_name != 'nan':
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
                 databaza_mien[tick_c] = full_name
-
-    st.markdown("##")
-    st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
-    
-    df_akcie = df[df['Action'].str.lower().str.contains('buy|investment|deposit|sell|divestment|withdrawal|rebalancing', na=False)].copy()
-    zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
-    
+                
     if zoznam_tickerov_all:
         ponuka_pre_menu = []
         mapovanie_tickerov = {}
@@ -68,16 +56,18 @@ if uploaded_files:
             ponuka_pre_menu.append(text_riadku)
             mapovanie_tickerov[text_riadku] = t
             
+        st.markdown("##")
+        st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
         ponuka_pre_menu = sorted(list(set(ponuka_pre_menu)))
-        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_v999")
+        vybrany_text = st.selectbox("Vyberte akciu zo svojho portfólia, ktorú plánujete predať:", ponuka_pre_menu, key="sel_linearna_checkpoint")
         vybrany_ticker_pure = mapovanie_tickerov[vybrany_text]
         
         col1, col2 = st.columns(2)
         with col1:
-            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_v999")
+            vstup_vlastnene = st.number_input("Počet kusov vlastnených na platforme Trading 212:", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="vstup_stav_checkpoint")
         with col2:
-            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_v999")
-        
+            aktualna_cena = st.number_input("Aktuálna trhová cena akcie v EUR (voliteľné):", min_value=0.0, value=0.0, step=0.01, format="%.2f", key="vstup_cena_checkpoint")
+            
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
         sklad_aktualny = []
@@ -98,7 +88,7 @@ if uploaded_files:
                         b['shares'] -= vziat
                         predat_este -= vziat
                 sklad_aktualny = [x for x in sklad_aktualny if x['shares'] > 1e-6]
-        
+                
         max_sklad_dostupny = sum([x['shares'] for x in sklad_aktualny])
         
         if vstup_vlastnene > 0:
@@ -145,19 +135,17 @@ if uploaded_files:
                         zostava_dni = 365 - vek_dni
                         riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
                         rozpis_textov.append(riadok_prehladu)
-                
+                        
                 ks_bez_dane = round(ks_bez_dane, 5)
                 ks_mlade = round(ks_mlade, 5)
                 
                 st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
                 st.progress(float(ks_bez_dane / skutocny_stav))
                 
-                # 🔓 ZELENÁ KARTA
                 trhova_hodnota_safe = ks_bez_dane * aktualna_cena
                 cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
                 st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
                 
-                # 🔓 ORANŽOVO-ŽLTÁ VÝSTRAHA
                 trhova_hodnota_mlade = ks_mlade * aktualna_cena
                 zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
                 dan_19 = round(zisk_mlade * 0.19, 2)
@@ -167,10 +155,25 @@ if uploaded_files:
                 st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
                 st.error(f"⚠️ **Daňový rozpis pre mladé akcie:** Krátkodobý zisk: {zisk_mlade:.2f} EUR | Daň z príjmu (19%): {dan_19:.2f} EUR | Zdravotné odvody (14%): {odvody_14:.2f} EUR | Celkovo odovzdáte štátu: -{celkovy_vypal_statu:.2f} EUR")
                 
-                # 🛡️ 100% STRUKTÚRNE PLOCHÝ EXPANDER ( checkpoint )
                 with st.expander("📋 Zobraziť detailný rozpis nákupných balíčkov (Frakcií)"):
                     st.write("Tu nájdete kompletný chronologický zoznam vašich nákupov, z ktorých je poskladaná dnešná otvorená pozícia:")
                     for r_text in rozpis_textov:
                         st.write(r_text)
-        else:
-            st.info("Pre zobrazenie daňového breakdownu zadajte do políčka vyššie množstvo väčšie ako 0.")
+        return vybrany_ticker_pure
+    return None
+
+# =========================================================================
+# 🔒 KRABICA Č. 2: IDENTICKÝ PREHĽAD DIVIDEND (Z checkpointu)
+# =========================================================================
+def vypocitaj_a_zobraz_dividendy(df, vybrany_ticker):
+    if not vybrany_ticker:
+        return
+    try:
+        df['Action_Lower'] = df['Action'].fillna('').astype(str).str.lower()
+        df['Ticker_Clean'] = df['Ticker'].fillna('').astype(str).str.strip().str.upper()
+        df_div = df[df['Action_Lower'].str.contains('dividend|dividenda', na=False)].copy()
+        df_div_ticker = df_div[df_div['Ticker_Clean'] == vybrany_ticker].copy()
+        
+        with st.expander("💰 Zobraziť prehľad a zdanenie Dividend pre vybranú akciu"):
+            if len(df_div_ticker) > 0:
+                total_brutto = 0.0
