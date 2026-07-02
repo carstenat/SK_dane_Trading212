@@ -7,11 +7,11 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
 # ==========================================
-# CONSTANTS & CONFIGURATION
+# KONŠTANTY A KONFIGURÁCIA (SR LEGISLATÍVA)
 # ==========================================
 TAX_RATE_SK = 0.19
 HEALTH_INSURANCE_RATE_SK = 0.15
-TAX_EXEMPTION_LIMIT_SK = 500.0  # § 9 ods. 1 písm. k) ZDP
+TAX_EXEMPTION_LIMIT_SK = 500.0  # Oslobodenie podľa § 9 ods. 1 písm. k) ZDP
 
 st.set_page_config(
     page_title="Súkromný PRO Optimalizátor pre Trading 212",
@@ -19,28 +19,20 @@ st.set_page_config(
     layout="wide"
 )
 
-# Initialize Session State
+# Inicializácia Session State proti nechcenému resetu dát
 if 'df_raw' not in st.session_state:
     st.session_state.df_raw = None
 if 'selected_year' not in st.session_state:
     st.session_state.selected_year = "Všetky"
-if 'ecb_rates' not in st.session_state:
-    st.session_state.ecb_rates = {}
 
 # ==========================================
-# ADVANCED CURRENCY & ECB RATES FETCH ENGINE
+# POMOCNÉ FUNKCIE A PARSER KURZOV ECB
 # ==========================================
 @st.cache_data(ttl=86400)
 def fetch_ecb_daily_rates_for_year(year):
-    """
-    Fetches daily conversion rates from ECB for USD and GBP against EUR for a given year.
-    Falls back to safe 1.0 if any network error occurs.
-    """
+    """Sťahuje historické denné kurzy USD a GBP voči EUR z ECB pre daný rok."""
     rates = {'USD': {}, 'GBP': {}}
     try:
-        # Fetching historical time series for the last 90 days or specific archive
-        # In production fintech, we pull from ECB SDMX API or historical XML
-        # Simple reliable fallback system with standard daily XML structure
         url = "https://europa.eu"
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
@@ -58,19 +50,18 @@ def fetch_ecb_daily_rates_for_year(year):
                         if currency in rates:
                             rates[currency][date_str] = rate_val
     except Exception:
-        pass # Secure silently against blocking application startup
+        pass
     return rates
 
 def get_ecb_rate(date_obj, currency, year_rates):
-    """Returns the ECB rate for a specific date, falls back to closest previous day if weekend."""
+    """Vráti kurz pre konkrétny deň. Ak je víkend, hľadá spätne najbližší piatok."""
     if currency == 'EUR' or not currency:
         return 1.0
     
     curr_dict = year_rates.get(currency, {})
     if not curr_dict:
-        return 1.10 # Hardcoded safe baseline fallback for USD if API times out
+        return 1.10  # Bezpečný fallback kurz pre USD pri výpadku API
         
-    # Check up to 5 days back to account for holidays and weekends
     for i in range(6):
         check_date = (date_obj - timedelta(days=i)).strftime("%Y-%m-%d")
         if check_date in curr_dict:
@@ -78,10 +69,8 @@ def get_ecb_rate(date_obj, currency, year_rates):
             
     return 1.10
 
-# ==========================================
-# CLEANING & REGEX PARSERS
-# ==========================================
 def clean_numeric_string(val):
+    """Vyčistí textové reťazce, odstráni znaky mien a opraví európske čiarky."""
     if pd.isna(val):
         return 0.0
     if isinstance(val, (int, float)):
@@ -103,18 +92,8 @@ def clean_numeric_string(val):
     except ValueError:
         return 0.0
 
-def detect_currency(val):
-    """Detects base currency from the column string text."""
-    if pd.isna(val):
-        return 'EUR'
-    val_str = str(val).upper()
-    if '$' in val_str or 'USD' in val_str:
-        return 'USD'
-    if '£' in val_str or 'GBP' in val_str:
-        return 'GBP'
-    return 'EUR'
-
 def normalize_columns(df):
+    """Unifikuje slovenské a anglické názvy stĺpcov z Trading 212."""
     mapping = {
         'time': 'Time', 'čas': 'Time', 'cas': 'Time',
         'action': 'Action', 'operácia': 'Action', 'operacia': 'Action', 'typ': 'Action',
@@ -150,11 +129,11 @@ def normalize_columns(df):
     return df
 
 def process_uploaded_files(uploaded_files):
+    """Zlúči a kompletne očistí všetky nahraté CSV súbory."""
     df_list = []
     for file in uploaded_files:
         try:
             current_df = pd.read_csv(file)
-            # Extrahuj menu ak je skrytá v názve stĺpca, napr. "Total (USD)"
             for col in current_df.columns:
                 if 'total' in col.lower() and ('usd' in col.lower() or '$' in col.lower()):
                     current_df['Currency_Detected'] = 'USD'
@@ -185,9 +164,10 @@ def process_uploaded_files(uploaded_files):
     return combined_df
 
 # ==========================================
-# MULTI-CURRENCY FIFO JADRO
+# STRIKTNÝ MULTI-CURRENCY FIFO ENGINE
 # ==========================================
 def run_fifo_engine(df, cached_rates):
+    """Páruje predaje proti nákupom (FIFO) so zohľadnením 1-ročného časového testu."""
     action_pattern = r'(buy|sell|nákup|nakup|predaj)'
     valid_df = df[
         df['Ticker'].notna() & 
@@ -208,7 +188,7 @@ def run_fifo_engine(df, cached_rates):
         currency = row['Currency']
         name = row['Name'] if pd.notna(row['Name']) else ticker
         
-        # Výpočet konverzného kurzu pre daný deň obchodu
+        # Denná konverzia kurzu podľa ECB
         rate = get_ecb_rate(row_date.date(), currency, cached_rates)
         price_eur = price_raw / rate if currency != 'EUR' else price_raw
         
@@ -216,6 +196,7 @@ def run_fifo_engine(df, cached_rates):
             fifo_pools[ticker] = []
             lot_counters[ticker] = 0
             
+        # NÁKUP (Prírastok do fronty)
         if 'buy' in action or 'nákup' in action or 'nakup' in action:
             lot_counters[ticker] += 1
             fifo_pools[ticker].append({
@@ -227,11 +208,12 @@ def run_fifo_engine(df, cached_rates):
                 'currency_orig': currency
             })
             
+        # PREDAJ (Párovanie FIFO z najstaršieho lotu)
         elif 'sell' in action or 'predaj' in action:
             shares_to_sell = shares
             
             while shares_to_sell > 0 and fifo_pools[ticker]:
-                oldest_lot = fifo_pools[ticker]
+                oldest_lot = fifo_pools[ticker][0]
                 
                 if oldest_lot['shares'] <= shares_to_sell:
                     matched_shares = oldest_lot['shares']
@@ -250,7 +232,20 @@ def run_fifo_engine(df, cached_rates):
                 profit_loss_eur = revenue_basis_eur - cost_basis_eur
                 
                 is_exempt = days_held >= 365
-                exempt_profit = profit_loss_eur if is_exempt else 0.0
                 taxable_profit = profit_loss_eur if not is_exempt else 0.0
                 
                 realized_trades.append({
+                    'Ticker': ticker,
+                    'Spoločnosť': name,
+                    'Kusy': matched_shares,
+                    'Dátum nákupu': buy_date.strftime('%Y-%m-%d'),
+                    'Dátum predaja': row_date.strftime('%Y-%m-%d'),
+                    'Dni držania': days_held,
+                    'Príjmy (EUR)': revenue_basis_eur,
+                    'Výdavky (EUR)': cost_basis_eur,
+                    'Zisk/Strata (EUR)': profit_loss_eur,
+                    'Oslobodené': 'Áno' if is_exempt else 'Nie',
+                    'Zdaniteľný zisk': taxable_profit,
+                    'Rok_Predaja': row_date.year
+                })
+                
