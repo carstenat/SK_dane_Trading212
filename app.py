@@ -6,7 +6,7 @@ import re
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
 # =========================================================================
-# 💾 TRVALÁ PAMÄŤ CLOUDU
+# 💾 TRVALÁ PAMÄŤ CLOUDU (OCHRANA PRED RESETOM SÚBOROV)
 # =========================================================================
 if "databaza_transakcii" not in st.session_state:
     st.session_state.databaza_transakcii = None
@@ -42,17 +42,16 @@ if uploaded_files:
         zoznam_df.append(pd.read_csv(file))
     st.session_state.databaza_transakcii = pd.concat(zoznam_df, ignore_index=True)
 
-# Funkcia na bezpečné očistenie textu na čisté float číslo
+# Funkcia na bezpečné očistenie textu na čisté float číslo (Odstraňuje EUR, USD, textové meny)
 def bezpecne_cislo(hodnota):
     if pd.isna(hodnota):
         return 0.0
     text = str(hodnota).strip()
-    # Odstránenie všetkého okrem čísel, pomlčky, bodky a čiarky (odmaže EUR, USD, atď.)
     text = re.sub(r'[^\d,\.-]', '', text)
     if ',' in text and '.' in text:
-        text = text.replace(',', '') # tisícné separátory
+        text = text.replace(',', '')
     elif ',' in text:
-        text = text.replace(',', '.') # európska desatinná čiarka
+        text = text.replace(',', '.')
     try:
         return float(text)
     except:
@@ -94,13 +93,11 @@ if st.session_state.databaza_transakcii is not None:
             
     df = df.rename(columns=mapovanie_stlpcov)
     
-    # Priradenie fallback hodnôt pre stĺpce
     if 'Time' not in df.columns: df['Time'] = pd.NaT
     if 'Action' not in df.columns: df['Action'] = 'unknown'
     if 'Ticker' not in df.columns: df['Ticker'] = 'UNKNOWN'
     if 'Name' not in df.columns: df['Name'] = 'Neznáma spoločnosť'
     
-    # 🌟 CRITICAL FIX: Vyčistenie finančných hodnôt od textových mien cez regex funkciu
     df['No. of shares'] = df['No. of shares'].apply(bezpecne_cislo)
     df['Total'] = df['Total'].apply(bezpecne_cislo)
     if 'Withholding tax' in df.columns:
@@ -167,7 +164,7 @@ if st.session_state.databaza_transakcii is not None:
             st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
 
     # =========================================================================
-    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (PANDAS ČISTENIE)
+    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (STABILNÝ PLOCHÝ FIFO ENGINE)
     # =========================================================================
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
@@ -190,7 +187,11 @@ if st.session_state.databaza_transakcii is not None:
     realizovane_obchody_rok = []
     otvorene_loty_portfolio = {}
 
-    # MATEMATICKÝ FIFO PARSER S DEFANZÍVNOU POISTKOU PROTI TICHÉMU PÁDU
+    # ✔️ STRIKTNE PLOCHÝ FIFO PRECHOD POLÍ BEZ NEBEZPEČNÝCH BLOCKOV 'TRY/EXCEPT' S CHYBNÝM VNORENÍM
     for t in zoznam_tickerov_vsetky:
-        try:
-            df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
+        df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
+        nakupne_loty = []
+        
+        for idx, row in df_t.iterrows():
+            množstvo = float(row['No. of shares'])
+            total_val = float(row['Total'])
