@@ -123,7 +123,7 @@ if uploaded_files:
         vydavok_mladeho_balika = 0.0
         
         rozpis_textov = []
-        export_csv_riadky = [["Datum nakupu", "Mnozstvo (ks)", "Nakupna cena/ks", "Celkovy nakup (EUR)", "Danovy stav", "Datum oslobodenia", "Zostava cakat (dni)", "Trhova hodnota (EUR)", "Zisk/Strata (EUR)"]]
+        zoznam_riadkov_exportu = []
         
         for n in sklad_aktualny:
             if potrebne_ks < 1e-5:
@@ -147,7 +147,7 @@ if uploaded_files:
                 vydavok_safe_balika += cena_balika
                 riadok_prehladu = f"🟢 **BEZ DANE** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Netreba čakať (Oslobodené)"
                 rozpis_textov.append(riadok_prehladu)
-                export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Bez dane", "Uz oslobodene", "0", f"{aktualna_hodnota_balika:.2f}", f"{zisk_balika:.2f}"])
+                zoznam_riadkov_exportu.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Bez dane", "Uz oslobodene", "0", f"{aktualna_hodnota_balika:.2f}", f"{zisk_balika:.2f}"])
             else:
                 ks_mlade += vziat_ks
                 vydavok_mladeho_balika += cena_balika
@@ -155,7 +155,7 @@ if uploaded_files:
                 zostava_dni = 365 - vek_dni
                 riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
                 rozpis_textov.append(riadok_prehladu)
-                export_csv_riadky.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Zdanuje sa", d_oslobodenia, f"{zostava_dni}", f"{aktualna_hodnota_balika:.2f}", f"{zisk_balika:.2f}"])
+                zoznam_riadkov_exportu.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Zdanuje sa", d_oslobodenia, f"{zostava_dni}", f"{aktualna_hodnota_balika:.2f}", f"{zisk_balika:.2f}"])
         
         ks_bez_dane = round(ks_bez_dane, 5)
         ks_mlade = round(ks_mlade, 5)
@@ -168,14 +168,12 @@ if uploaded_files:
             st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks ({vypocitany_pomer * 100:.1f}%)")
             st.progress(vypocitany_pomer)
             
-            # Finančné kalkulácie kariet
             trh_hodnota_safe = ks_bez_dane * aktualna_cena
             cisty_zisk_safe = trh_hodnota_safe - vydavok_safe_balika
             
             trh_hodnota_risk = ks_mlade * aktualna_cena
             hruby_zisk_risk = trh_hodnota_risk - vydavok_mladeho_balika
             
-            # Výpočet 19% dane a 14% odvodov (len ak je zisk kladný)
             dan_risk = max(0.0, hruby_zisk_risk * 0.19)
             odvody_risk = max(0.0, hruby_zisk_risk * 0.14)
             cisty_zisk_risk = hruby_zisk_risk - dan_risk - odvody_risk
@@ -185,3 +183,9 @@ if uploaded_files:
             with col_karta1:
                 st.success(
                     "### 🟢 Zelená karta úspechu (Oslobodené)\n\n"
+                    f"* **Trhová hodnota:** {trh_hodnota_safe:.2f} EUR\n"
+                    f"* **Čistý zisk bez dane:** {cisty_zisk_safe:.2f} EUR\n"
+                    f"* *Poznámka: Tieto akcie spĺňajú ročný časový test v SR.*"
+                )
+                
+            with col_karta2:
