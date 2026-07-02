@@ -2,9 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import re
-import requests
-import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # ==========================================
 # KONŠTANTY A KONFIGURÁCIA (SR LEGISLATÍVA)
@@ -28,43 +26,6 @@ if 'selected_year' not in st.session_state:
 # ==========================================
 # POMOCNÉ ČISTIACE A PARSOVACIE MODULY
 # ==========================================
-@st.cache_data(ttl=86400)
-def fetch_ecb_daily_rates_for_year(year):
-    rates = {'USD': {}, 'GBP': {}}
-    try:
-        url = "https://europa.eu"
-        response = requests.get(url, timeout=3)
-        if response.status_code == 200:
-            root = ET.fromstring(response.content)
-            namespaces = {'ns': 'http://ecb.int'}
-            for cube_time in root.findall('.//ns:Cube[@time]', namespaces):
-                date_str = cube_time.get('time')
-                try:
-                    date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-                    if date_obj.year == int(year):
-                        for cube_curr in cube_time.findall('ns:Cube', namespaces):
-                            currency = cube_curr.get('currency')
-                            rate_val = float(cube_curr.get('rate'))
-                            if currency in rates:
-                                rates[currency][date_str] = rate_val
-                except Exception:
-                    continue
-    except Exception:
-        pass
-    return rates
-
-def get_ecb_rate(date_obj, currency, year_rates):
-    if currency == 'EUR' or not currency:
-        return 1.0
-    curr_dict = year_rates.get(currency, {})
-    if not curr_dict:
-        return 1.10
-    for i in range(6):
-        check_date = (date_obj - timedelta(days=i)).strftime("%Y-%m-%d")
-        if check_date in curr_dict:
-            return curr_dict[check_date]
-    return 1.10
-
 def clean_numeric_string(val):
     if pd.isna(val):
         return 0.0
@@ -117,11 +78,6 @@ def process_uploaded_files(uploaded_files):
     for file in uploaded_files:
         try:
             current_df = pd.read_csv(file)
-            for col in current_df.columns:
-                if 'total' in col.lower() and ('usd' in col.lower() or '$' in col.lower()):
-                    current_df['Currency_Detected'] = 'USD'
-                elif 'total' in col.lower() and ('gbp' in col.lower() or '£' in col.lower()):
-                    current_df['Currency_Detected'] = 'GBP'
             df_list.append(current_df)
         except Exception:
             continue
@@ -132,10 +88,7 @@ def process_uploaded_files(uploaded_files):
     combined_df = pd.concat(df_list, ignore_index=True)
     combined_df = normalize_columns(combined_df)
     
-    if 'Currency_Detected' in combined_df.columns:
-        combined_df['Currency'] = combined_df['Currency'].fillna(combined_df['Currency_Detected'])
     combined_df['Currency'] = combined_df['Currency'].fillna('EUR').astype(str).str.upper().str.strip()
-    
     combined_df['Shares'] = combined_df['Shares'].apply(clean_numeric_string)
     combined_df['PricePerShare'] = combined_df['PricePerShare'].apply(clean_numeric_string)
     combined_df['Total'] = combined_df['Total'].apply(clean_numeric_string)
@@ -145,9 +98,9 @@ def process_uploaded_files(uploaded_files):
     return combined_df
 
 # ==========================================
-# STABILNÉ LINEÁRNE FIFO JADRO (OPRAVENÝ BUG INDEXU)
+# STABILNÉ LINEÁRNE FIFO JADRO (BEZ KRAŠOV)
 # ==========================================
-def run_fifo_engine(df, cached_rates):
+def run_fifo_engine(df):
     action_pattern = r'(buy|sell|nákup|nakup|predaj)'
     valid_df = df[
         df['Ticker'].notna() & 
@@ -168,12 +121,8 @@ def run_fifo_engine(df, cached_rates):
         action = str(row['Action']).lower()
         row_date = row['Time']
         shares = abs(row['Shares'])
-        price_raw = row['PricePerShare']
-        currency = row['Currency']
+        price_eur = row['PricePerShare']  # Počítame s natívnou cenou z CSV
         name = row['Name'] if pd.notna(row['Name']) else ticker
-        
-        rate = get_ecb_rate(row_date.date(), currency, cached_rates)
-        price_eur = price_raw / rate if currency != 'EUR' else price_raw
         
         if ticker not in fifo_pools:
             fifo_pools[ticker] = []
@@ -188,7 +137,7 @@ def run_fifo_engine(df, cached_rates):
                 'price_eur': price_eur,
                 'orig_shares': shares,
                 'lot_id': lot_counters[ticker],
-                'currency_orig': currency
+                'currency_orig': row['Currency']
             })
             
         # PREDAJ: Bezpečné lineárne párovanie
@@ -200,7 +149,7 @@ def run_fifo_engine(df, cached_rates):
                 if shares_to_sell <= 1e-7 or len(fifo_pools[ticker]) == 0:
                     break
                     
-                # DEFINTÍVNA OPRAVA: vytiahne prvý konkrétny dictionary objekt indexom [0]
+                # FIX: Natvrdo vyťahujeme prvý konkrétny slovník z poľa cez index 0
                 oldest_lot = fifo_pools[ticker][0]
                 
                 if oldest_lot['shares'] <= (shares_to_sell + 1e-7):
@@ -247,3 +196,63 @@ def run_fifo_engine(df, cached_rates):
                 t_profit.append(0.0)
                 t_exempt.append('Nie')
                 t_taxable.append(0.0)
+                t_years.append(row_date.year)
+                
+    if len(t_tickers) == 0:
+        return pd.DataFrame(), fifo_pools
+        
+    trades_df = pd.DataFrame({
+        'Ticker': t_tickers, 'Spoločnosť': t_names, 'Kusy': t_shares,
+        'Dátum nákupu': t_buydates, 'Dátum predaja': t_selldates, 'Dni držania': t_days,
+        'Príjmy (EUR)': t_revenue, 'Výdavky (EUR)': t_costs, 'Zisk/Strata (EUR)': t_profit,
+        'Oslobodené': t_exempt, 'Zdaniteľný zisk': t_taxable, 'Rok_Predaja': t_years
+    })
+    return trades_df, fifo_pools
+
+# ==========================================
+# HLAVNÝ BEZPEČNÝ RENDER STRÁNKY (UI)
+# ==========================================
+st.title("📈 Súkromný PRO Optimalizátor pre Trading 212")
+st.caption("Verzia 4.0: Odstránené sieťové API a ošetrené indexovanie šarží. Absolútna stabilita štartu.")
+
+st.header("1. Vstup dát (Hromadný import CSV)")
+uploaded_files = st.file_uploader(
+    "Nahrajte jeden alebo viac CSV exportov z Trading 212:", 
+    type=["csv"], 
+    accept_multiple_files=True
+)
+
+if uploaded_files:
+    parsed_df = process_uploaded_files(uploaded_files)
+    if parsed_df is not None:
+        st.session_state.df_raw = parsed_df
+        st.success("Dáta úspešne načítané.")
+
+# KĽÚČOVÁ OCHRANA: Ak v stave nie sú dáta, kód sa tu natvrdo zastaví a nevyvolá bielu obrazovku
+if st.session_state.df_raw is None:
+    st.info("Na aktiváciu aplikácie nahrajte aspoň jeden CSV súbor exportu z Trading 212 vyššie.")
+    st.stop()
+
+# Ak dáta existujú, bezpečne pokračujeme vo vykresľovaní zvyšku stránky
+df_main = st.session_state.df_raw
+
+# Spustenie stabilného bezchybného engine
+try:
+    df_trades, open_lots_pool = run_fifo_engine(df_main)
+except Exception as fatal_err:
+    st.error(f"Chyba pri spracovaní FIFO: {fatal_err}")
+    st.stop()
+
+st.header("2. Výber daňového obdobia")
+available_years = ["Všetky"]
+if not df_main.empty:
+    years_found = sorted(list(df_main['Time'].dt.year.unique()))
+    available_years.extend([str(y) for y in years_found])
+
+cols_years = st.columns(len(available_years))
+for idx, yr in enumerate(available_years):
+    if cols_years[idx].button(f"📅 {yr}", key=f"btn_yr_{yr}"):
+        st.session_state.selected_year = yr
+
+st.write(f"Aktívne daňové obdobie: **{st.session_state.selected_year}**")
+
