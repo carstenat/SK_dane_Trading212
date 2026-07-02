@@ -40,12 +40,49 @@ if uploaded_files:
     df = pd.concat(zoznam_df, ignore_index=True)
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     
-    # Separácia dividend a úrokov pred prečistením o chýbajúce Tickers pre akcie
+    # =========================================================================
+    # 💰 GLOBALNE MODULY: DIVIDENDY A ÚROKY (ZOBRAZENÉ HNEĎ NA ZAČIATKU)
+    # =========================================================================
     df_dividendy = df[df['Action'].str.lower().str.contains('dividend', na=False)].copy()
     df_uroky = df[df['Action'].str.lower().str.contains('interest', na=False)].copy()
     
+    st.markdown("---")
+    col_div, col_int = st.columns(2)
+    
+    with col_div:
+        st.header("💰 Modul Dividend")
+        if not df_dividendy.empty:
+            total_div_gross = pd.to_numeric(df_dividendy['Total'], errors='coerce').fillna(0.0).sum()
+            total_div_wht = pd.to_numeric(df_dividendy.get('Withholding tax', 0), errors='coerce').fillna(0.0).sum()
+            total_div_net = total_div_gross - total_div_wht
+            
+            st.metric("Celkové pripísané dividendy (Brutto)", f"{total_div_gross:.2f} EUR")
+            st.metric("Zahraničná zrazená daň (WHT)", f"{total_div_wht:.2f} EUR")
+            st.write(f"**Čisté vyplatené dividendy (Netto):** {total_div_net:.2f} EUR")
+            
+            with st.expander("Zobraziť históriu dividend"):
+                st.dataframe(df_dividendy[['Time', 'Ticker', 'Action', 'Total', 'Withholding tax']])
+        else:
+            st.info("V importovaných súboroch sa nenachádzajú žiadne záznamy o dividendách.")
+            
+    with col_int:
+        st.header("💶 Modul Úrokov")
+        if not df_uroky.empty:
+            total_interest_brutto = pd.to_numeric(df_uroky['Total'], errors='coerce').fillna(0.0).sum()
+            dan_z_urokov = total_interest_brutto * 0.19
+            total_interest_netto = total_interest_brutto - dan_z_urokov
+            
+            st.metric("Pripísané denné úroky (Brutto)", f"{total_interest_brutto:.2f} EUR")
+            st.metric("Daňová povinnosť v SR (19%)", f"{dan_z_urokov:.2f} EUR")
+            st.write(f"**Čistý výnos z úrokov po zdanení:** {total_interest_netto:.2f} EUR")
+            
+            with st.expander("Zobraziť históriu pripísaných úrokov"):
+                st.dataframe(df_uroky[['Time', 'Action', 'Total']])
+        else:
+            st.info("V importovaných súboroch sa nenachádzajú žiadne záznamy o úrokoch z hotovosti.")
+
+    # Processing pre akcie
     df = df.dropna(subset=['Time', 'Ticker']).sort_values(by='Time').reset_index(drop=True)
-        
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
     df['Withholding tax'] = pd.to_numeric(df['Withholding tax'], errors='coerce').fillna(0.0)
@@ -59,7 +96,7 @@ if uploaded_files:
             if tick_c not in databaza_mien or len(full_name) > len(databaza_mien[tick_c]):
                 databaza_mien[tick_c] = full_name
 
-    st.markdown("##")
+    st.markdown("---")
     st.header("🔍 Hlavný optimalizátor pozície")
     
     df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)].copy()
@@ -86,9 +123,7 @@ if uploaded_files:
         
         df_ticker = df_akcie[df_akcie['Ticker_Clean'] == vybrany_ticker_pure].sort_values(by='Time').reset_index(drop=True)
         
-        # =========================================================================
-        # ⚙️ FIFO PÁROVACÍ MOTOR
-        # =========================================================================
+        # FIFO MOTOR
         sklad_aktualny = []
         for _, riadok in df_ticker.iterrows():
             typ = str(riadok['Action']).lower()
@@ -154,38 +189,3 @@ if uploaded_files:
                 d_oslobodenia = (nakup_pure + pd.Timedelta(days=365)).strftime('%d.%m.%Y')
                 zostava_dni = 365 - vek_dni
                 riadok_prehladu = f"🔴 **ZDAŇUJE SA** | Nákup: {d_nakupu} | Množstvo: {text_mnozstva} pri cene {text_ceny} ({text_celkovo}) | ⏳ Zostáva čakať: **{zostava_dni} dní** (Oslobodenie: {d_oslobodenia})"
-                rozpis_textov.append(riadok_prehladu)
-                zoznam_riadkov_exportu.append([d_nakupu, f"{vziat_ks:.5f}", f"{n['cena_za_kus']:.2f}", f"{cena_balika:.2f}", "Zdanuje sa", d_oslobodenia, f"{zostava_dni}", f"{aktualna_hodnota_balika:.2f}", f"{zisk_balika:.2f}"])
-        
-        ks_bez_dane = round(ks_bez_dane, 5)
-        ks_mlade = round(ks_mlade, 5)
-        
-        # =========================================================================
-        # 📊 VIZUÁLNY PROGRESS BAR & KARTY
-        # =========================================================================
-        if skutocny_stav > 0:
-            vypocitany_pomer = float(ks_bez_dane / skutocny_stav)
-            st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks ({vypocitany_pomer * 100:.1f}%)")
-            st.progress(vypocitany_pomer)
-            
-            trh_hodnota_safe = ks_bez_dane * aktualna_cena
-            cisty_zisk_safe = trh_hodnota_safe - vydavok_safe_balika
-            
-            trh_hodnota_risk = ks_mlade * aktualna_cena
-            hruby_zisk_risk = trh_hodnota_risk - vydavok_mladeho_balika
-            
-            dan_risk = max(0.0, hruby_zisk_risk * 0.19)
-            odvody_risk = max(0.0, hruby_zisk_risk * 0.14)
-            cisty_zisk_risk = hruby_zisk_risk - dan_risk - odvody_risk
-            
-            karta1, karta2 = st.columns(2)
-            
-            txt_safe = "### 🟢 Zelená karta úspechu (Oslobodené)\n\n"
-            txt_safe += f"* **Trhová hodnota:** {trh_hodnota_safe:.2f} EUR\n"
-            txt_safe += f"* **Čistý zisk bez dane:** {cisty_zisk_safe:.2f} EUR\n"
-            txt_safe += "* *Poznámka: Tieto akcie spĺňajú ročný časový test v SR.*"
-            karta1.success(txt_safe)
-            
-            je_v_zisku = bool(hruby_zisk_risk > 0)
-            
-
