@@ -147,41 +147,23 @@ if st.session_state.databaza_transakcii is not None:
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
 
     # =========================================================================
-    # 🔍 HLAVNÝ OPTIMALIZÁTOR A FIFO ENGINE
+    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (VÝPOČET PRE VŠETKY TICKERY)
     # =========================================================================
     st.markdown("---")
-    st.header("🔍 Pokročilý FIFO Optimalizátor realizovaných a otvorených frakcií")
-
-    zoznam_tickerov = sorted([t for t in df['Ticker_Clean'].unique() if t != ''])
+    st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
-    if zoznam_tickerov:
-        mapovanie_zobrazenia = {}
-        list_prvkov = []
+    zoznam_tickerov_vsetky = sorted([t for t in df['Ticker_Clean'].unique() if t != ''])
+    
+    vsetky_realizovane_global = []
+    celkove_riziko_global = 0.0
+    
+    # Prebehneme FIFO engine na pozadí pre úplne každú akciu
+    for t_glob in zoznam_tickerov_vsetky:
+        df_t_glob = df[df['Ticker_Clean'] == t_glob].copy()
+        tx_glob = df_t_glob[df_t_glob['Action'].str.lower().str.contains('buy|sell', na=False)].copy()
         
-        for t in zoznam_tickerov:
-            meno_firmy = databaza_mien.get(t, "Neznámy titul")
-            retazec = f"{t} - {meno_firmy}"
-            mapovanie_zobrazenia[retazec] = t
-            list_prvkov.append(retazec)
-            
-        # 🔀 Bezpečné abecedné zoradenie podľa vybranej preferencie
-        if metoda_zoradenia == "Názvu spoločnosti abecedne":
-            list_na_zobrazenie = sorted(list_prvkov, key=lambda x: x.split(" - ")[1].lower())
-        else:
-            list_na_zobrazenie = sorted(list_prvkov, key=lambda x: x.split(" - ")[0].lower())
-            
-        vybrany_text = st.selectbox("Vyberte akciu alebo ETF (môžete do okna priamo písať a hľadať):", list_na_zobrazenie)
-        skutocny_ticker = mapovanie_zobrazenia[vybrany_text]
-        
-        df_ticker = df[df['Ticker_Clean'] == skutocny_ticker].copy()
-        st.subheader(f"FIFO analýza lotov pre: {vybrany_text}")
-        
-        vsetky_transakcie = df_ticker[df_ticker['Action'].str.lower().str.contains('buy|sell', na=False)].copy()
-        
-        nakupne_loty = []
-        realizovane_obchody = []
-        
-        for _, r in vsetky_transakcie.iterrows():
+        loty_glob = []
+        for _, r in tx_glob.iterrows():
             akcia = r['Action'].lower()
             kusy = float(r['No. of shares'])
             celkovy_objem = float(r['Total'])
@@ -191,8 +173,23 @@ if st.session_state.databaza_transakcii is not None:
             if 'buy' in akcia:
                 if kusy > 0.00001:
                     cena_jednotkova = celkovy_objem / kusy
-                    # Lineárny line-by-line zápis cez dict() na zamedzenie SyntaxError
-                    novy_lot = dict()
-                    novy_lot["Time"] = cas_tx
-                    novy_lot["Kusy_Povodny"] = kusy
-                    novy_lot["Kusy_Zostatok"] = kusy
+                    novy_l = dict()
+                    novy_l["Time"] = cas_tx
+                    novy_l["Kusy_Zostatok"] = kusy
+                    novy_l["Cena_Za_Kus"] = cena_jednotkova
+                    loty_glob.append(novy_l)
+            elif 'sell' in akcia:
+                zostava_na_predaj = kusy
+                for lot in loty_glob:
+                    if zostava_na_predaj <= 0.00001:
+                        break
+                    if lot["Kusy_Zostatok"] > 0.00001:
+                        odcerpane = min(zostava_na_predaj, lot["Kusy_Zostatok"])
+                        n_cena = odcerpane * lot["Cena_Za_Kus"]
+                        p_jednotkova = celkovy_objem / kusy if kusy > 0.00001 else 0.0
+                        p_cena = odcerpane * p_jednotkova
+                        zisk_strata = p_cena - n_cena
+                        
+                        oslobodene = (cas_tx - lot["Time"]).days >= 365
+                        
+                        # Ukladáme iba predaje patriace do zvoleného roku
