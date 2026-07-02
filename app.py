@@ -5,9 +5,6 @@ import re
 
 st.set_page_config(page_title="Trading 212 PRO Daňový Assistant", page_icon="📈", layout="wide")
 
-# =========================================================================
-# 💾 TRVALÁ PAMÄŤ CLOUDU (OCHRANA PRED RESETOM SÚBOROV)
-# =========================================================================
 if "databaza_transakcii" not in st.session_state:
     st.session_state.databaza_transakcii = None
 
@@ -25,7 +22,6 @@ if uploaded_files:
         zoznam_df.append(pd.read_csv(file))
     st.session_state.databaza_transakcii = pd.concat(zoznam_df, ignore_index=True)
 
-# Funkcia na bezpečné očistenie textu na čisté float číslo
 def bezpecne_cislo(hodnota):
     if pd.isna(hodnota):
         return 0.0
@@ -43,51 +39,39 @@ def bezpecne_cislo(hodnota):
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🚨 PREDNÁ DIAGNOSTIKA: Tento blok sa vykreslí VŽDY a hneď navrchu!
-    st.markdown("### 🔍 Interná diagnostika tvojho CSV súboru")
-    st.warning("Ak pod týmto blokom vidíš iba prázdne nadpisy, skontroluj tabuľku nižšie. Tvoje CSV stĺpce sa volajú inak, než kód očakáva.")
-    
-    st.write("**Skutočné názvy stĺpcov nájdené v tvojom súbore:**")
-    st.code(list(df.columns))
-    
-    st.write("**Ukážka prvých 3 riadkov tvojich surových dát:**")
-    st.dataframe(df.head(3), use_container_width=True)
-    st.markdown("---")
-
-    # 🔍 UNIVERZÁLNE MAPOVANIE VARIÁCIÍ STĹPCOV (SK / EN)
+    # Automatické mapovanie stĺpcov
     mapovanie_stlpcov = {}
     flags = {"time": False, "action": False, "ticker": False, "name": False, "shares": False, "price": False, "total": False, "wht": False}
     
     for c in df.columns:
         c_low = c.lower()
-        if ('time' in c_low or 'čas' in c_low or 'datum' in c_low or 'dátum' in c_low) and not flags["time"]:
+        if ('time' in c_low or 'čas' in c_low or 'datum' in c_low) and not flags["time"]:
             mapovanie_stlpcov[c] = 'Time'
             flags["time"] = True
-        elif ('action' in c_low or 'operácia' in c_low or 'operacia' in c_low or 'typ' in c_low) and not flags["action"]:
+        elif ('action' in c_low or 'operácia' in c_low or 'typ' in c_low) and not flags["action"]:
             mapovanie_stlpcov[c] = 'Action'
             flags["action"] = True
         elif ('ticker' in c_low or 'symbol' in c_low) and not flags["ticker"]:
             mapovanie_stlpcov[c] = 'Ticker'
             flags["ticker"] = True
-        elif ('name' in c_low or 'názov' in c_low or 'nazov' in c_low or 'spoločnosť' in c_low) and not flags["name"]:
+        elif ('name' in c_low or 'názov' in c_low or 'spoločnosť' in c_low) and not flags["name"]:
             mapovanie_stlpcov[c] = 'Name'
             flags["name"] = True
-        elif ('shares' in c_low or 'kus' in c_low or 'počet' in c_low or 'pocet' in c_low or 'množstvo' in c_low) and not flags["shares"]:
+        elif ('shares' in c_low or 'kus' in c_low or 'množstvo' in c_low) and not flags["shares"]:
             mapovanie_stlpcov[c] = 'No. of shares'
             flags["shares"] = True
         elif ('price' in c_low or 'cena' in c_low) and not flags["price"]:
             mapovanie_stlpcov[c] = 'Price per share'
             flags["price"] = True
-        elif ('total' in c_low or 'celkom' in c_low or 'suma' in c_low or 'celková' in c_low) and not flags["total"]:
+        elif ('total' in c_low or 'celkom' in c_low or 'suma' in c_low) and not flags["total"]:
             mapovanie_stlpcov[c] = 'Total'
             flags["total"] = True
-        elif ('withholding' in c_low or 'zrazen' in c_low or 'daň' in c_low or 'wht' in c_low) and not flags["wht"]:
+        elif ('withholding' in c_low or 'zrazen' in c_low or 'daň' in c_low) and not flags["wht"]:
             mapovanie_stlpcov[c] = 'Withholding tax'
             flags["wht"] = True
             
     df = df.rename(columns=mapovanie_stlpcov)
     
-    # Fallback pre chýbajúce stĺpce
     if 'Time' not in df.columns: df['Time'] = pd.NaT
     if 'Action' not in df.columns: df['Action'] = 'unknown'
     if 'Ticker' not in df.columns: df['Ticker'] = 'UNKNOWN'
@@ -95,18 +79,16 @@ if st.session_state.databaza_transakcii is not None:
     
     df['No. of shares'] = df['No. of shares'].apply(bezpecne_cislo)
     df['Total'] = df['Total'].apply(bezpecne_cislo)
-    if 'Withholding tax' in df.columns:
-        df['Withholding tax'] = df['Withholding tax'].apply(bezpecne_cislo)
-    else:
-        df['Withholding tax'] = 0.0
+    df['Withholding tax'] = df['Withholding tax'].apply(bezpecne_cislo) if 'Withholding tax' in df.columns else 0.0
 
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df['Rok'] = df['Time'].dt.year
     df['Action_Clean'] = df['Action'].fillna('').astype(str).str.strip().str.lower()
 
     # =========================================================================
-    # 📅 MODUL SELEKCIE DAŇOVÉHO OBDOBIA
+    # 📅 VÝBER ROKA
     # =========================================================================
+    st.markdown("---")
     st.subheader("📅 Výber daňového obdobia na kontrolu")
     
     roky_v_datach = sorted([int(r) for r in df['Rok'].dropna().unique()])
@@ -116,65 +98,54 @@ if st.session_state.databaza_transakcii is not None:
     for idx, r_opt in enumerate(moznosti_rokov):
         with cols_roky[idx]:
             b_type = "primary" if st.session_state.vybrany_rok == r_opt else "secondary"
-            if st.button(f"Rok {r_opt}" if r_opt != "Všetky" else "Všetky obdobia", type=b_type, key=f"btn_rok_{r_opt}"):
+            if st.button(f"Rok {r_opt}" if r_opt != "Všetky" else "Všetky", key=f"btn_rok_{r_opt}", type=b_type):
                 st.session_state.vybrany_rok = r_opt
                 st.rerun()
 
-    if st.session_state.vybrany_rok == "Všetky":
-        df_filtrovane = df.copy()
-    else:
-        df_filtrovane = df[df['Rok'] == int(st.session_state.vybrany_rok)].copy()
+    df_filtrovane = df.copy() if st.session_state.vybrany_rok == "Všetky" else df[df['Rok'] == int(st.session_state.vybrany_rok)].copy()
 
     # =========================================================================
-    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY
+    # 💰 MODULY: DIVIDENDY A ÚROKY
     # =========================================================================
     df_dividendy = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('dividend', na=False)].copy()
     df_uroky = df_filtrovane[df_filtrovane['Action_Clean'].str.contains('interest', na=False)].copy()
     
     col_div, col_int = st.columns(2)
-    
     with col_div:
         st.header(f"💰 Modul Dividend ({st.session_state.vybrany_rok})")
         if not df_dividendy.empty:
             total_div_gross = df_dividendy['Total'].sum()
             total_div_wht = df_dividendy['Withholding tax'].sum()
-            total_div_net = total_div_gross - total_div_wht
             st.metric("Celkové pripísané dividendy (Brutto)", f"{total_div_gross:.2f} EUR")
             st.metric("Zahraničná zrazená daň (WHT)", f"{total_div_wht:.2f} EUR")
-            st.write(f"**Čisté vyplatené dividendy (Netto):** {total_div_net:.2f} EUR")
+            st.write(f"**Čisté dividendy:** {total_div_gross - total_div_wht:.2f} EUR")
         else:
-            st.info("Pre zvolené obdobie sa nenašli žiadne dividendy.")
+            st.info("Žiadne dividendy.")
             
     with col_int:
         st.header(f"💶 Modul Úrokov ({st.session_state.vybrany_rok})")
         if not df_uroky.empty:
             total_interest_brutto = df_uroky['Total'].sum()
-            dan_z_urokov = total_interest_brutto * 0.19
-            total_interest_netto = total_interest_brutto - dan_z_urokov
             st.metric("Pripísané denné úroky (Brutto)", f"{total_interest_brutto:.2f} EUR")
-            st.metric("Daňová povinnosť v SR (19%)", f"{dan_z_urokov:.2f} EUR")
-            st.write(f"**Čistý výnos z úrokov po zdanení:** {total_interest_netto:.2f} EUR")
+            st.metric("Daňová povinnosť v SR (19%)", f"{total_interest_brutto * 0.19:.2f} EUR")
         else:
-            st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
+            st.info("Žiadne úroky z hotovosti.")
 
     # =========================================================================
-    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (ČISTO ČÍSELNÝ PLOCHÝ FIFO ENGINE)
+    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (STABILNÝ FIFO ENGINE)
     # =========================================================================
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
-    df_akcie_len = df.dropna(subset=['Time']).copy()
-    df_akcie_len = df_akcie_len[~df_akcie_len['Action_Clean'].str.contains('dividend|interest', na=False)]
-    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].fillna('UNKNOWN').astype(str).str.strip().str.upper()
-    df_akcie_len = df_akcie_len[(df_akcie_len['Ticker_Clean'] != '') & (df_akcie_len['Ticker_Clean'] != 'UNKNOWN')]
+    # 🌟 CRITICAL LOCK: Filtrujeme iba riadky, ktoré majú skutočný ticker a čas!
+    df_akcie_len = df.dropna(subset=['Time', 'Ticker']).copy()
+    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
+    df_akcie_len = df_akcie_len[(df_akcie_len['Ticker_Clean'] != '') & (df_akcie_len['Ticker_Clean'] != 'NONE') & (df_akcie_len['Ticker_Clean'] != 'NAN')]
     df_akcie_len = df_akcie_len.sort_values(by='Time').reset_index(drop=True)
     
     databaza_mien = {}
     for _, riadok in df_akcie_len.iterrows():
-        tick_c = riadok['Ticker_Clean']
-        full_name = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
-        if full_name and full_name != 'nan':
-            databaza_mien[tick_c] = full_name
+        databaza_mien[riadok['Ticker_Clean']] = str(riadok.get('Name', 'Zjednodušená akcia')).strip()
 
     zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique()])
     
@@ -188,20 +159,47 @@ if st.session_state.databaza_transakcii is not None:
         for idx, row in df_t.iterrows():
             množstvo = float(row['No. of shares'])
             total_val = float(row['Total'])
+            akcia = str(row['Action_Clean'])
+            
+            if 'dividend' in akcia or 'interest' in akcia or množstvo == 0:
+                continue
+                
+            # ✔️ OCHRANA PROTI DELENIU NULOU
             cena_ks = (total_val / množstvo) if množstvo > 0 else 0.0
             
-            if množstvo > 0:
+            if 'buy' in akcia or 'nákup' in akcia or množstvo > 0:
                 nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']})
                 
-            if množstvo < 0:
+            if 'sell' in akcia or 'predaj' in akcia or množstvo < 0:
                 množstvo_na_predaj = abs(množstvo)
                 for lot in list(nakupne_loty):
                     if lot['množstvo'] <= 0 or množstvo_na_predaj <= 0:
                         continue
-                    
                     odpredane_množstvo = min(lot['množstvo'], množstvo_na_predaj)
                     lot['množstvo'] -= odpredane_množstvo
                     množstvo_na_predaj -= odpredane_množstvo
                     
-                    prijem = odpredane_množstvo * cena_ks
-                    vydaj = odpredane_množstvo * lot['cena_nakup']
+                    zisk_z_predaja = (odpredane_množstvo * cena_ks) - (odpredane_množstvo * lot['cena_nakup'])
+                    dni_drzania = (row['Time'] - lot['datum_nakup']).days
+                    oslobodene = (dni_drzania >= 365)
+                    
+                    if st.session_state.vybrany_rok == "Všetky" or row['Rok'] == int(st.session_state.vybrany_rok):
+                        realizovane_obchody_rok.append({
+                            'Ticker': t,
+                            'Spoločnosť': databaza_mien.get(t, "Neznáma"),
+                            'Kusy': odpredane_množstvo,
+                            'Zisk/Strata': zisk_z_predaja,
+                            'Oslobodené': "Áno" if oslobodene else "Nie",
+                            'Zdaniteľný Zisk': 0.0 if oslobodene else zisk_z_predaja
+                        })
+        otvorene_loty_portfolio[t] = [lot for lot in nakupne_loty if lot['množstvo'] > 0.000001]
+
+    if len(realizovane_obchody_rok) == 0:
+        st.info(f"ℹ️ V daňovom období '{st.session_state.vybrany_rok}' ste nerealizovali žiadne predaje akcií.")
+        zdanitelny_zisk_celkom = 0.0
+    else:
+        df_realizovane = pd.DataFrame(realizovane_obchody_rok)
+        st.dataframe(df_realizovane, use_container_width=True)
+        zdanitelny_zisk_celkom = max(0.0, df_realizovane['Zdaniteľný Zisk'].sum())
+
+    col_m1, col_m2, col_m3 = st.columns(3)
