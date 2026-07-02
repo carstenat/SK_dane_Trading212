@@ -44,7 +44,12 @@ if uploaded_files:
 if st.session_state.databaza_transakcii is not None:
     df = st.session_state.databaza_transakcii.copy()
     
-    # 🔍 NEPRIESTRELNÉ UNIVERZÁLNE MAPOVANIE VŠETKÝCH STĹPCOV (SK / EN mutácie)
+    # 🚨 DIAGNOSTICKÝ BLOK: Zobrazí štruktúru CSV, ak by aplikácia opäť zhasla
+    with st.expander("🔍 Interná diagnostika nahrato CSV (Kliknite pre kontrolu stĺpcov)"):
+        st.write("Nájdené stĺpce v súbore:", list(df.columns))
+        st.write("Ukážka prvých 3 riadkov dát:", df.head(3))
+
+    # 🔍 NEPRIESTRELNÉ MAPOVANIE VŠETKÝCH VARIÁCIÍ STĹPCOV
     mapovanie_stlpcov = {}
     flags = {"time": False, "action": False, "ticker": False, "name": False, "shares": False, "price": False, "total": False, "wht": False}
     
@@ -53,46 +58,45 @@ if st.session_state.databaza_transakcii is not None:
         if ('time' in c_low or 'čas' in c_low or 'datum' in c_low or 'dátum' in c_low) and not flags["time"]:
             mapovanie_stlpcov[c] = 'Time'
             flags["time"] = True
-        elif ('action' in c_low or 'operácia' in c_low or 'operacia' in c_low) and not flags["action"]:
+        elif ('action' in c_low or 'operácia' in c_low or 'operacia' in c_low or 'typ' in c_low) and not flags["action"]:
             mapovanie_stlpcov[c] = 'Action'
             flags["action"] = True
         elif ('ticker' in c_low or 'symbol' in c_low) and not flags["ticker"]:
             mapovanie_stlpcov[c] = 'Ticker'
             flags["ticker"] = True
-        elif ('name' in c_low or 'názov' in c_low or 'nazov' in c_low) and not flags["name"]:
+        elif ('name' in c_low or 'názov' in c_low or 'nazov' in c_low or 'spoločnosť' in c_low) and not flags["name"]:
             mapovanie_stlpcov[c] = 'Name'
             flags["name"] = True
-        elif ('shares' in c_low or 'kus' in c_low or 'počet' in c_low or 'pocet' in c_low) and not flags["shares"]:
+        elif ('shares' in c_low or 'kus' in c_low or 'počet' in c_low or 'pocet' in c_low or 'množstvo' in c_low) and not flags["shares"]:
             mapovanie_stlpcov[c] = 'No. of shares'
             flags["shares"] = True
         elif ('price' in c_low or 'cena' in c_low) and not flags["price"]:
             mapovanie_stlpcov[c] = 'Price per share'
             flags["price"] = True
-        elif ('total' in c_low or 'celkom' in c_low or 'suma' in c_low) and not flags["total"]:
+        elif ('total' in c_low or 'celkom' in c_low or 'suma' in c_low or 'celková' in c_low) and not flags["total"]:
             mapovanie_stlpcov[c] = 'Total'
             flags["total"] = True
-        elif ('withholding' in c_low or 'zrazen' in c_low or 'daň' in c_low) and not flags["wht"]:
+        elif ('withholding' in c_low or 'zrazen' in c_low or 'daň' in c_low or 'wht' in c_low) and not flags["wht"]:
             mapovanie_stlpcov[c] = 'Withholding tax'
             flags["wht"] = True
             
     df = df.rename(columns=mapovanie_stlpcov)
     
-    # Defenzívne doplnenie chýbajúcich stĺpcov, aby kód nespadol
+    # Priradenie fall-back hodnôt
     if 'Time' not in df.columns: df['Time'] = pd.NaT
     if 'Action' not in df.columns: df['Action'] = 'unknown'
-    if 'Ticker' not in df.columns: df['Ticker'] = ''
-    if 'Name' not in df.columns: df['Name'] = ''
+    if 'Ticker' not in df.columns: df['Ticker'] = 'UNKNOWN'
+    if 'Name' not in df.columns: df['Name'] = 'Neznáma spoločnosť'
     if 'No. of shares' not in df.columns: df['No. of shares'] = 0.0
     if 'Total' not in df.columns: df['Total'] = 0.0
     if 'Withholding tax' not in df.columns: df['Withholding tax'] = 0.0
     
-    # Parsovanie dátumov a čistenie typov
     df['Time'] = pd.to_datetime(df['Time'], errors='coerce').dt.tz_localize(None)
     df['Rok'] = df['Time'].dt.year
     df['Action_Clean'] = df['Action'].fillna('').astype(str).str.strip().str.lower()
 
     # =========================================================================
-    # 📅 MODUL SELEKCIE DAŇOVÉHO OBDOBIA (Tlačidlá)
+    # 📅 MODUL SELEKCIE DAŇOVÉHO OBDOBIA
     # =========================================================================
     st.markdown("---")
     st.subheader("📅 Výber daňového obdobia na kontrolu")
@@ -158,18 +162,15 @@ if st.session_state.databaza_transakcii is not None:
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
 
     # =========================================================================
-    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (VÝPOČET PRE VŠETKY TICKERY CEZ FIFO)
+    # 🌍 GLOBÁLNY DAŇOVÝ REPORT PORTFÓLIA (VÝPOČET CEZ PLOCHÝ FIFO ENGINE)
     # =========================================================================
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
-    # Spracovanie poľa s vyčistenými akcionárskymi dátami
     df_akcie_len = df.dropna(subset=['Time']).copy()
-    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].fillna('').astype(str).str.strip().str.upper()
-    df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != '']
-    df_akcie_len = df_akcie_len[df_akcie_len['Ticker_Clean'] != 'NAN'].sort_values(by='Time').reset_index(drop=True)
+    df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].fillna('UNKNOWN').astype(str).str.strip().str.upper()
+    df_akcie_len = df_akcie_len.sort_values(by='Time').reset_index(drop=True)
     
-    # Generovanie databázy mien spoločností
     databaza_mien = {}
     for _, riadok in df_akcie_len.iterrows():
         tick_c = riadok['Ticker_Clean']
@@ -177,13 +178,9 @@ if st.session_state.databaza_transakcii is not None:
         if full_name and full_name != 'nan':
             databaza_mien[tick_c] = full_name
 
-    zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique()])
+    zoznam_tickerov_vsetky = sorted([t for t in df_akcie_len['Ticker_Clean'].unique() if t != ''])
     
     realizovane_obchody_rok = []
     otvorene_loty_portfolio = {}
 
-    # ÚPLNE PLOCHÝ LINEÁRNY FIFO ENGINE (Úplná garancia stability)
     for t in zoznam_tickerov_vsetky:
-        df_t = df_akcie_len[df_akcie_len['Ticker_Clean'] == t].copy()
-        nakupne_loty = []
-        
