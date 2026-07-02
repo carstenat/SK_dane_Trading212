@@ -14,10 +14,16 @@ if "vybrany_rok" not in st.session_state:
     st.session_state.vybrany_rok = "Všetky"
 
 # =========================================================================
-# 🎨 PRÉMIOVÝ FINTECH VZHĽAD
+# 🎨 PRÉMIOVÝ FINTECH VZHĽAD A NASTAVENIA ZORADENIA
 # =========================================================================
 st.sidebar.header("⚙️ Nastavenia vzhľadu")
 dark_mode = st.sidebar.checkbox("Zapnúť Tmavý režim (Dark Mode)", value=False)
+
+st.sidebar.header("🔀 Nastavenia zoznamu akcií")
+metoda_zoradenia = st.sidebar.radio(
+    "Zoradiť zoznam spoločností podľa:",
+    options=["Tickeru abecedne", "Názvu spoločnosti abecedne"]
+)
 
 if dark_mode:
     st.markdown("<style>.stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; } h1, h2, h3, label, p, span { color: #FFFFFF !important; } div[data-testid='stMetric'] { background-color: #1E293B !important; border: 2px solid #475569 !important; border-radius: 12px !important; padding: 14px 18px !important; }</style>", unsafe_allow_html=True)
@@ -97,7 +103,7 @@ if st.session_state.databaza_transakcii is not None:
         df_filtrovane = df[df['Rok'] == int(st.session_state.vybrany_rok)].copy()
 
     # =========================================================================
-    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY (S VRÁTENÝMI EXPANDERMI)
+    # 💰 GLOBÁLNE MODULY: DIVIDENDY A ÚROKY (S EXPANDERMI)
     # =========================================================================
     df_dividendy = df_filtrovane[df_filtrovane['Action'].str.lower().str.contains('dividend', na=False)].copy()
     df_uroky = df_filtrovane[df_filtrovane['Action'].str.lower().str.contains('interest', na=False)].copy()
@@ -136,7 +142,6 @@ if st.session_state.databaza_transakcii is not None:
         else:
             st.info("Pre zvolené obdobie sa nenašli žiadne úroky z hotovosti.")
 
-    # Zoradenie celej databázy podľa času pre správny výpočet FIFO lotov
     df = df.dropna(subset=['Time', 'Ticker']).sort_values(by='Time').reset_index(drop=True)
     df['No. of shares'] = pd.to_numeric(df['No. of shares'], errors='coerce').fillna(0.0)
     df['Total'] = pd.to_numeric(df['Total'], errors='coerce').fillna(0.0)
@@ -151,16 +156,22 @@ if st.session_state.databaza_transakcii is not None:
     
     if zoznam_tickerov:
         mapovanie_zobrazenia = {}
-        list_na_zobrazenie = []
+        list_prvkov = []
         
         for t in zoznam_tickerov:
             meno_firmy = databaza_mien.get(t, "Neznámy titul")
             retazec = f"{t} - {meno_firmy}"
-            mapovanie_zobrazenia[retazec] = t
-            list_na_zobrazenie.append(retazec)
+            mapovanie_zobrazenia[retazec] = (t, meno_firmy)
+            list_prvkov.append(retazec)
             
-        vybrany_text = st.selectbox("Vyberte akciu alebo ETF pre detailnú analýzu:", list_na_zobrazenie)
-        skutocny_ticker = mapovanie_zobrazenia[vybrany_text]
+        # 🔀 Dynamické zoradenie podľa vybranej preferencie v sidebare
+        if metoda_zoradenia == "Názvu spoločnosti abecedne":
+            list_na_zobrazenie = sorted(list_prvkov, key=lambda x: mapovanie_zobrazenia[x][1].lower())
+        else:
+            list_na_zobrazenie = sorted(list_prvkov, key=lambda x: mapovanie_zobrazenia[x][0].lower())
+            
+        vybrany_text = st.selectbox("Vyberte akciu alebo ETF (môžete do okna priamo písať a hľadať):", list_na_zobrazenie)
+        skutocny_ticker = mapovanie_zobrazenia[vybrany_text][0]
         
         df_ticker = df[df['Ticker_Clean'] == skutocny_ticker].copy()
         st.subheader(f"FIFO analýza lotov pre: {vybrany_text}")
@@ -186,16 +197,3 @@ if st.session_state.databaza_transakcii is not None:
                         "Total_Cena": celkovy_objem,
                         "Cena_Za_Kus": celkovy_objem / kusy,
                         "Rok": rok_tx
-                    })
-            elif 'sell' in akcia:
-                zostava_na_predaj = kusy
-                
-                for lot in nakupne_loty:
-                    if zostava_na_predaj <= 0.00001:
-                        break
-                        
-                    if lot["Kusy_Zostatok"] > 0.00001:
-                        odcerpane_kusy = min(zostava_na_predaj, lot["Kusy_Zostatok"])
-                        
-                        nakupna_cena_sarze = odcerpane_kusy * lot["Cena_Za_Kus"]
-
