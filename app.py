@@ -15,7 +15,6 @@ if dark_mode:
         <style>
         .stApp { background-color: #0B0F19 !important; color: #F8FAFC !important; }
         h1, h2, h3, label, p, span { color: #FFFFFF !important; }
-        div[data-testid="stAppViewContainer"] { background-color: #0B0F19 !important; }
         div[data-testid="stMetric"] { background-color: #1E293B !important; border: 2px solid #475569 !important; border-radius: 12px !important; padding: 14px 18px !important; }
         </style>
     """, unsafe_allow_html=True)
@@ -58,7 +57,6 @@ if uploaded_files:
     st.markdown("##")
     st.header("🔍 Daňový Optimalizátor pre dnešný predaj")
     
-    # 🛡️ UNIVERZÁLNY AKCIOVÝ FILTER (Slovenská aj anglická mutácia Action)
     df_akcie = df[df['Action'].str.lower().str.contains('buy|sell|nákup|nakup|predaj|market|limit', na=False)].copy()
     zoznam_tickerov_all = sorted([x for x in df_akcie['Ticker_Clean'].unique() if x and x != 'nan' and x != ''])
     
@@ -155,23 +153,24 @@ if uploaded_files:
                 ks_bez_dane = round(ks_bez_dane, 5)
                 ks_mlade = round(ks_mlade, 5)
                 
+                # 🛡️ FIX 1: Absolútna synchronizácia textu a progress baru na reálne orezané maximum
                 st.markdown(f"**Vizuálny pomer safe pozície:** {ks_bez_dane:.5f} ks z {skutocny_stav:.5f} ks")
-                
-                # 🛡️ NEPRIESTRELNÁ POISTKA PROTI CHYBE PROGRESS VALUE (Hodnota nikdy nepresiahne 1.0)
                 vypocitany_pomer = float(ks_bez_dane / skutocny_stav) if skutocny_stav > 0 else 0.0
-                safe_pomer = max(0.0, min(1.0, vypocitany_pomer))
-                st.progress(safe_pomer)
+                st.progress(max(0.0, min(1.0, vypocitany_pomer)))
                 
                 # 🔓 ZELENÁ KARTA
-                trhova_hodnota_safe = ks_bez_dane * aktualna_cena
-                cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
-                st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
+                if aktualna_cena > 0:
+                    trhova_hodnota_safe = ks_bez_dane * aktualna_cena
+                    cisty_zisk_safe = max(0.0, trhova_hodnota_safe - vydavok_safe_balika)
+                    st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks** | Súčasná hodnota: {trhova_hodnota_safe:.2f} € (Čistý oslobodený zisk: +{cisty_zisk_safe:.2f} €)")
+                else:
+                    st.success(f"🔓 Môžete predať IHNEĎ BEZ DANE: **{ks_bez_dane:.5f} ks**")
                 
-                # 🔓 ORANŽOVO-ŽLTÁ VÝSTRAHA
-                trhova_hodnota_mlade = ks_mlade * aktualna_cena
-                zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
-                dan_19 = round(zisk_mlade * 0.19, 2)
-                odvody_14 = round(zisk_mlade * 0.14, 2)
-                celkovy_vypal_statu = dan_19 + odvody_14
-                
-                st.warning(f"🔒 POZOR, MLADÉ FRAKCIE (Zdaňujú sa pri predaji dnes): {ks_mlade:.5f} ks")
+                # 🔓 ORANŽOVO-ŽLTÁ VÝSTRAHA (FIX 2: Ošetrenie nulových hodnôt pri chýbajúcej cene)
+                if ks_mlade > 0:
+                    if aktualna_cena > 0:
+                        trhova_hodnota_mlade = ks_mlade * aktualna_cena
+                        zisk_mlade = max(0.0, trhova_hodnota_mlade - vydavok_mladeho_balika)
+                        dan_19 = round(zisk_mlade * 0.19, 2)
+                        odvody_14 = round(zisk_mlade * 0.14, 2)
+                        celkovy_vypal_statu = dan_19 + odvody_14
