@@ -54,7 +54,6 @@ if st.session_state.databaza_transakcii is not None:
             mapovanie_stlpcov[c] = 'Ticker'
             flags["ticker"] = True
         elif ('name' in c_low or 'názov' in c_low or 'spoločnosť' in c_low) and not flags["name"]:
-            mapexport = 'Name'
             mapovanie_stlpcov[c] = 'Name'
             flags["name"] = True
         elif ('shares' in c_low or 'kus' in c_low or 'množstvo' in c_low) and not flags["shares"]:
@@ -132,7 +131,6 @@ if st.session_state.databaza_transakcii is not None:
     st.markdown("---")
     st.header(f"📊 Globálny daňový report portfólia pre obdobie: {st.session_state.vybrany_rok}")
     
-    # 🌟 ROBUSTNÝ AKCIOVÝ FILTER: Čistíme akékoľvek textové mutácie a vklady bez tickerov
     df_akcie_len = df.copy()
     df_akcie_len = df_akcie_len[df_akcie_len['Ticker'].notna()]
     df_akcie_len['Ticker_Clean'] = df_akcie_len['Ticker'].astype(str).str.strip().str.upper()
@@ -163,7 +161,7 @@ if st.session_state.databaza_transakcii is not None:
             is_buy_action = ('buy' in akcia or 'nákup' in akcia or 'nakup' in akcia)
             
             if is_buy_action and not is_sell_action:
-                nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time']})
+                nakupne_loty.append({'množstvo': množstvo, 'cena_nakup': cena_ks, 'datum_nakup': row['Time'], 'pôvodné': množstvo})
                 continue
                 
             if is_sell_action:
@@ -185,7 +183,8 @@ if st.session_state.databaza_transakcii is not None:
                             'Zisk/Strata': zisk, 'Oslobodené': "Áno" if oslobodene else "Nie",
                             'Zdaniteľný Zisk': 0.0 if oslobodene else (zisk if zisk > 0 else 0.0)
                         })
-        otvorene_loty_portfolio[t] = [lot for lot in nakupne_loty if lot['množstvo'] > 0.000001]
+        # ⭐ LOCK ZMENY: Ukladáme úplne všetky loty, aj tie s nulovým zostatkom, aby sme videli prehľad histórie!
+        otvorene_loty_portfolio[t] = nakupne_loty
 
     if len(realizovane_obchody_rok) == 0:
         st.info(f"ℹ️ V daňovom období '{st.session_state.vybrany_rok}' ste nerealizovali žiadne predaje akcií.")
@@ -197,3 +196,4 @@ if st.session_state.databaza_transakcii is not None:
 
     col_m1, col_m2, col_m3 = st.columns(3)
     with col_m1: st.metric("Krátkodobý zdaniteľný zisk", f"{zdanitelny_zisk_celkom:,.2f} EUR")
+    with col_m2: st.metric("Daň z príjmu (19%)", f"{zdanitelny_zisk_celkom * 0.19:,.2f} EUR")
